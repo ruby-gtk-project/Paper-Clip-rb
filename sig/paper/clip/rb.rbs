@@ -1,0 +1,10 @@
+module Paper
+  module Clip
+    module Rb
+      module Version
+        VERSION: String
+      end
+      VERSION: String
+    end
+  end
+end
