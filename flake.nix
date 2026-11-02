@@ -104,6 +104,18 @@
           ruby = pkgs.ruby_3_4;
           inherit gemConfig;
           gemdir = ./nix;
+          groups = [ "default" ];
+        };
+
+        # The same gemdir with the `test` group included: rspec belongs in the
+        # devShell and not in the packaged app's runtime closure, and
+        # bundlerEnv's `groups` is the only thing that keeps those apart.
+        devGems = pkgs.bundlerEnv {
+          name = "Paper-Clip-dev-gems";
+          ruby = pkgs.ruby_3_4;
+          inherit gemConfig;
+          gemdir = ./nix;
+          groups = [ "default" "test" ];
         };
 
         # The launcher is whatever the gemspec installs into exe/. Reading the
@@ -128,7 +140,12 @@
           # computed its wrapper arguments, so a schema would end up somewhere
           # the wrapper never looks. The wrapper below is built by hand and
           # points at both the pre- and post-move paths.
-          nativeBuildInputs = [ pkgs.makeWrapper ];
+          #
+          # gettext is build-time only: `msgfmt -c --check-format` is the check
+          # that a translator's %s typo cannot crash the app in one language,
+          # and the gettext gem's own rmsgfmt does not implement it. The
+          # compiled catalogues are the only thing that reaches the closure.
+          nativeBuildInputs = [ pkgs.makeWrapper pkgs.gettext ];
           buildInputs = [ gems ] ++ gtkStack;
 
           dontBuild = true;
@@ -145,10 +162,49 @@
             # resolves against the copied tree.
             install -Dm755 exe/${launcher} $out/share/Paper-Clip/exe/${launcher}
 
-            # Compile any GSettings schema the port ships.
-            if [ -d data/schemas ]; then
+            # Compile po/ into locale/<lang>/LC_MESSAGES/<domain>.mo, which is
+            # where Translations.LOCALE_DIR looks. LINGUAS and not po/*.po, so
+            # a language that loses its file loses it loudly.
+            if [ -f po/LINGUAS ]; then
+              for lang in $(cat po/LINGUAS); do
+                install -d "$out/share/Paper-Clip/locale/$lang/LC_MESSAGES"
+                msgfmt -c --check-format \
+                  -o "$out/share/Paper-Clip/locale/$lang/LC_MESSAGES/pdf-metadata-editor.mo" \
+                  "po/$lang.po"
+              done
+            fi
+
+            # The desktop entry, the AppStream metainfo and the GSettings
+            # schema are translated by msgfmt and AppStream rather than by the
+            # gettext gem, which is why they are merged here and not read from
+            # locale/ at runtime.
+            if [ -f data/io.github.diegoivan.pdf_metadata_editor.desktop.in ]; then
+              install -d $out/share/applications
+              msgfmt --desktop --template data/io.github.diegoivan.pdf_metadata_editor.desktop.in \
+                -d po -o $out/share/applications/io.github.diegoivan.pdf_metadata_editor.desktop
+            fi
+
+            if [ -f data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in ]; then
+              install -d $out/share/metainfo
+              msgfmt --xml --template data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in \
+                -d po -o $out/share/metainfo/io.github.diegoivan.pdf_metadata_editor.metainfo.xml
+            fi
+
+            # The hicolor tree upstream ships, so the welcome page and the
+            # About dialog find the application icon and the five bundled
+            # symbolic icons without an icon search path of their own.
+            if [ -d data/icons/hicolor ]; then
+              install -d $out/share/icons
+              cp -r data/icons/hicolor $out/share/icons/
+            fi
+
+            # Compile the GSettings schema the port ships.
+            for schema in data/*.gschema.xml data/schemas/*.gschema.xml; do
+              [ -f "$schema" ] || continue
               mkdir -p $out/share/glib-2.0/schemas
-              cp data/schemas/*.gschema.xml $out/share/glib-2.0/schemas/
+              cp "$schema" $out/share/glib-2.0/schemas/
+            done
+            if [ -d $out/share/glib-2.0/schemas ]; then
               ${pkgs.glib.dev}/bin/glib-compile-schemas $out/share/glib-2.0/schemas
             fi
 
@@ -182,8 +238,8 @@
           name = "Paper-Clip-devshell";
 
           packages = [
-            gems
-            gems.wrappedRuby
+            devGems
+            devGems.wrappedRuby
             pkgs.bundler
             pkgs.bundix
             pkgs.pkg-config

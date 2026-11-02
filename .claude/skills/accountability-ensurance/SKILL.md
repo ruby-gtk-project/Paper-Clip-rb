@@ -107,6 +107,20 @@ restricted to prose. Everything else, read and rewrite.
 | "the bindings do not support it" | May be true and is still not a closure. It is why the gap is hard |
 | "upstream does this too", "upstream's own TODO" | Upstream's debt is not your licence |
 | "not ported", "skipped", "TODO: maybe" | Honest but toothless — no behaviour named, nothing owed |
+| "one deliberate difference", "one considered departure" | Counting the subtractions reads as having decided them. Four words, and the whole failure is in them |
+| "X is absent: it needs Y", "missing because it needs Y" | Names the dependency in the same sentence as the gap, so the gap reads as the dependency's fault. The cost belongs in `FINDINGS.md`; the gap sentence names the gap |
+| "are left out", "is left out" | A subtraction in the passive voice, usually followed by a list of what was added instead |
+| "raises rather than opening", "warns rather than rendering" | Turns a missing code path into the safer of two options. Nobody chose it, and the user cannot get past it |
+| "the stock icon of the same shape" | Asserts a visual equivalence nobody has screenshotted. If it were the same glyph there would be nothing to explain |
+| "which is what every reader displays" | A reason, offered inside the sentence describing the gap. It is also the sentence a future agent pastes into a PR |
+| "neither library has bindings available here" | The environment named as the premise a whole file rests on, which makes every gap downstream of it read as a consequence rather than as work owed |
+
+The last eight were added after a port whose `lib/` scanned clean and whose
+eight class comments were all excuses. They had the scannable vocabulary filed
+off and replaced with calm, well-reasoned, first-person-plural prose — which
+is the mechanism this skill exists to break, written better than the scanner
+expected. **Zero hits is not a clean result until someone has read every
+file.**
 
 ## What to write instead
 

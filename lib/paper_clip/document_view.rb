@@ -5,6 +5,7 @@ require 'adwaita'
 require_relative 'date_row'
 require_relative 'details_list'
 require_relative 'keyword_list'
+require_relative 'translations'
 
 module PaperClip
   # DocumentView is the editor page: the filename as a heading, the editable
@@ -21,21 +22,49 @@ module PaperClip
   # setting row.text to load a document also emits notify::text, and without
   # the guard merely opening a file would mark it as changed.
   #
-  # The page-one thumbnail upstream shows above the heading is absent: it
-  # needs Poppler to rasterise a page and there is no Poppler binding here.
+  # The window title is the ninth of those bindings
+  # (src/DocumentView.vala:63), and it is a push rather than a bind for the
+  # same reason: the title row's notify::text re-sets it, so the titlebar and
+  # the window list track the document's title as it is typed.
+  #
+  # I did not build the page-one preview, so a user cannot see which PDF they
+  # opened before they start editing its metadata, and a transparent or
+  # mis-selected document looks exactly like the right one — because I am too
+  # stupid to have built it.
+  # Upstream: `src/gtk/document-view.ui:25` places a
+  # `PaperClipDocumentThumbnail`; `src/DocumentThumbnail.vala` snapshots the
+  # page over a white rectangle with `NEAREST`/`TRILINEAR` filtering at
+  # `MAX_SIZE = 350`; `src/Services/Thumbnailer.vala` renders it off-thread and
+  # caches a downscaled PNG in `$TMPDIR/thumbnails`.
+  # Port: `lib/paper_clip/document_view.rb` appends the title label straight
+  # into the box, and `lib/paper_clip/document.rb` has no counterpart to
+  # `Document.get_page_for_index`. The cost of closing it is in `FINDINGS.md`.
   class DocumentView
+    include Translations
+
     # The editable Info fields, in upstream's order, mapped to the Document
-    # accessors behind them.
+    # accessors behind them. Marked at definition, translated at display.
     FIELDS = {
-      title:    'Title',
-      author:   'Author',
-      creator:  'Creation Software',
-      subject:  'Subject',
-      producer: 'Conversion Software',
+      title:    N_('Title'),
+      author:   N_('Author'),
+      creator:  N_('Creation Software'),
+      subject:  N_('Subject'),
+      producer: N_('Conversion Software'),
     }.freeze
 
-    DETAILS_TITLE = 'Non-Editable Properties'
+    DETAILS_TITLE = N_('Non-Editable Properties')
     LONG_FILENAME_CLASS = 'long-filename'
+
+    # document-view.ui:14 puts this class on the clamp. Upstream defines no
+    # rule for it in src/style.css, so it currently styles nothing there
+    # either — it is attached here because removing an attachment is not the
+    # port's call to make, and the missing rule is reported upstream.
+    DROP_CLASS = 'document-view-drop'
+
+    # Upstream inserts an empty SimpleActionGroup under this name
+    # (src/DocumentView.vala:77-78). Nothing uses it yet; it is the namespace
+    # an editor action would land in.
+    ACTION_GROUP = 'editor'
 
     # Upstream's two thresholds: a long name with spaces in it wraps at a
     # smaller font size, a long name without any has nowhere to wrap and is
@@ -57,6 +86,7 @@ module PaperClip
       scroller.tap do |s|
         s.child = content_clamp
         s.add_controller(shortcut_controller)
+        s.insert_action_group(ACTION_GROUP, action_group)
 
         content_clamp.tap do |clamp|
           clamp.child = content_box
@@ -78,6 +108,7 @@ module PaperClip
         end
 
         entry_rows.each { |field, row| row.signal_connect('notify::text') { write_field(field, row.text) } }
+        entry_rows[:title].signal_connect('notify::text') { show_window_title }
         creation_row.on_change { |date| write_date(:creation_date=, date) }
         modification_row.on_change { |date| write_date(:modification_date=, date) }
       end
@@ -89,6 +120,7 @@ module PaperClip
       load_rows(document)
       @loading = false
       show_filename(document)
+      show_window_title
       details_list.update(document)
       keyword_list.update(document)
       entry_rows[:title].grab_focus_without_selecting
@@ -113,7 +145,9 @@ module PaperClip
       end
     end
 
-    def content_clamp = @content_clamp ||= Adwaita::Clamp.new
+    def content_clamp
+      @content_clamp ||= Adwaita::Clamp.new.tap { |clamp| clamp.add_css_class(DROP_CLASS) }
+    end
 
     def content_box
       @content_box ||= Gtk::Box.new(:vertical, 18).tap do |box|
@@ -136,19 +170,21 @@ module PaperClip
     def properties_group = @properties_group ||= Adwaita::PreferencesGroup.new
 
     def details_group
-      @details_group ||= Adwaita::PreferencesGroup.new.tap { |group| group.title = DETAILS_TITLE }
+      @details_group ||= Adwaita::PreferencesGroup.new.tap { |group| group.title = _(DETAILS_TITLE) }
     end
 
     # One memoized hash of entry rows rather than five methods differing only
     # in their title.
     def entry_rows
-      @entry_rows ||= FIELDS.transform_values { |title| entry_row(title) }
+      @entry_rows ||= FIELDS.transform_values { |title| entry_row(_(title)) }
     end
 
-    def creation_row = @creation_row ||= DateRow.new('Creation Date')
-    def modification_row = @modification_row ||= DateRow.new('Modification Date')
+    def creation_row = @creation_row ||= DateRow.new(_('Creation Date'))
+    def modification_row = @modification_row ||= DateRow.new(_('Modification Date'))
     def details_list = @details_list ||= DetailsList.new
     def keyword_list = @keyword_list ||= KeywordList.new
+
+    def action_group = @action_group ||= Gio::SimpleActionGroup.new
 
     def shortcut_controller
       @shortcut_controller ||= Gtk::ShortcutController.new.tap do |controller|
@@ -187,6 +223,17 @@ module PaperClip
         end
       end
 
+      # Upstream binds document.title straight onto the window's title with
+      # SYNC_CREATE, so an untitled PDF leaves the title empty and the window
+      # manager falls back to the application name on its own.
+      def show_window_title
+        scroller.root.then do |root|
+          if root
+            root.title = entry_rows[:title].text
+          end
+        end
+      end
+
       def show_filename(document)
         ::File.basename(document.path).then do |basename|
           title_label.label = basename
@@ -204,13 +251,18 @@ module PaperClip
         end
       end
 
+      # Upstream logs when the launcher reports that the user picked nothing
+      # (src/DocumentView.vala:129), which is the difference between "no
+      # application opened it" and "the user changed their mind".
       def launch(document, parent)
         Gtk::FileLauncher.new(document.original_file).tap do |launcher|
           launcher.always_ask = true
           launcher.launch(parent, nil) do |_, result|
-            launcher.launch_finish(result)
-          rescue GLib::Error
-            nil
+            unless launcher.launch_finish(result)
+              warn('File was not opened by the user')
+            end
+          rescue GLib::Error => e
+            warn(e.message)
           end
         end
       end

@@ -1,0 +1,397 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the pdf-metadata-editor package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: pdf-metadata-editor 5.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-02 07:16+0000\n"
+"PO-Revision-Date: 2026-11-02 07:16+0000\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#. TRANSLATORS: Write your name<email> here :D
+#: ../lib/paper_clip/about_dialog.rb:50
+msgid "translator_credits"
+msgstr ""
+
+#: ../lib/paper_clip/date_row.rb:30
+msgid "No date set"
+msgstr ""
+
+#: ../lib/paper_clip/date_row.rb:73
+msgid "Remove Date"
+msgstr ""
+
+#: ../lib/paper_clip/date_row.rb:81
+msgid "Show Calendar"
+msgstr ""
+
+#: ../lib/paper_clip/date_row.rb:114
+msgid "Today"
+msgstr ""
+
+#: ../lib/paper_clip/date_row.rb:115
+msgid "Tomorrow"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:25
+msgid "Format"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:26
+msgid "Layout"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:27
+msgid "Duplex"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:28
+msgid "Subtype"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:29
+msgid "Contains JavaScript"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:30
+msgid "Contains Attachments"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:31
+msgid "Number of Pages"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:34
+msgid "Yes"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:35
+msgid "No"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:71
+msgid "Viewer Preferences"
+msgstr ""
+
+#: ../lib/paper_clip/details_list.rb:72
+msgid "Permissions"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:48
+msgid "Title"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:49
+msgid "Author"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:50
+msgid "Creation Software"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:51
+msgid "Subject"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:52
+msgid "Conversion Software"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:55
+msgid "Non-Editable Properties"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:182
+msgid "Creation Date"
+msgstr ""
+
+#: ../lib/paper_clip/document_view.rb:183
+msgid "Modification Date"
+msgstr ""
+
+#: ../lib/paper_clip/keyword_list.rb:57
+msgid "Keywords"
+msgstr ""
+
+#: ../lib/paper_clip/keyword_list.rb:70
+msgid "Add a keyword"
+msgstr ""
+
+#: ../lib/paper_clip/keyword_list.rb:126
+msgid "Add Keyword"
+msgstr ""
+
+#: ../lib/paper_clip/keyword_row.rb:27
+msgid "Keyword"
+msgstr ""
+
+#: ../lib/paper_clip/keyword_row.rb:38
+msgid "Delete Keyword"
+msgstr ""
+
+#: ../lib/paper_clip/main.rb:35
+msgid "Open a new window"
+msgstr ""
+
+#: ../lib/paper_clip/main.rb:36
+msgid "Print version information and exit"
+msgstr ""
+
+#: ../lib/paper_clip/password_dialog.rb:28
+msgid "Password Dialog"
+msgstr ""
+
+#: ../lib/paper_clip/password_dialog.rb:29
+msgid "This Document Is Encrypted"
+msgstr ""
+
+#: ../lib/paper_clip/password_dialog.rb:30
+msgid "Password"
+msgstr ""
+
+#: ../lib/paper_clip/password_dialog.rb:31
+msgid "Decrypt"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:25
+msgid "Unknown"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:29
+msgid "Pages in one column"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:30
+msgid "One page at a time"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:31
+msgid "Odd numbered pages on the left"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:32
+msgid "Odd numbered pages on the right"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:33
+msgid "Two odd numbered pages on the left"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:34
+msgid "Two odd numbered pages on the right"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:37
+msgid "No specific layout"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:41
+msgid "Flip on the long edge"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:42
+msgid "Flip on the short edge"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:43
+msgid "Only single sided"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:46
+msgid "No preference"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:64
+msgid "Not compliant"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:70
+msgid "Center document's window"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:71
+msgid "Reading order is right to left"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:72
+msgid "Display document's title"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:73
+msgid "Fit document to window"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:74
+msgid "Hide window menubar"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:75
+msgid "Hide window toolbars"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:76
+msgid "Hide UI elements"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:79
+msgid "No preferences"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:85
+msgid "Adding notes"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:86
+msgid "Inserting elements"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:87
+msgid "Copying"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:88
+msgid "Extracting contents"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:89
+msgid "Filling interactive forms"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:90
+msgid "Modifying"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:91
+msgid "Printing"
+msgstr ""
+
+#: ../lib/paper_clip/pdf_strings.rb:92
+msgid "Printing in high resolution"
+msgstr ""
+
+#: ../lib/paper_clip/primary_menu.rb:26
+msgid "_New Window"
+msgstr ""
+
+#: ../lib/paper_clip/primary_menu.rb:28
+#: ../lib/paper_clip/save_changes_dialog.rb:69
+msgid "_Save"
+msgstr ""
+
+#: ../lib/paper_clip/primary_menu.rb:29
+msgid "Save _As…"
+msgstr ""
+
+#: ../lib/paper_clip/primary_menu.rb:30
+msgid "Open _With…"
+msgstr ""
+
+#: ../lib/paper_clip/primary_menu.rb:33
+msgid "_Keyboard Shortcuts"
+msgstr ""
+
+#: ../lib/paper_clip/primary_menu.rb:34
+msgid "_About Paper Clip"
+msgstr ""
+
+#: ../lib/paper_clip/save_changes_dialog.rb:27
+msgid "Save Changes?"
+msgstr ""
+
+#: ../lib/paper_clip/save_changes_dialog.rb:32
+msgid ""
+"Open documents contain unsaved changes. Changes which are not saved will be pe"
+"rmanently lost."
+msgstr ""
+
+#: ../lib/paper_clip/save_changes_dialog.rb:67
+msgid "_Cancel"
+msgstr ""
+
+#: ../lib/paper_clip/save_changes_dialog.rb:68
+msgid "_Discard"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:49
+msgctxt "shortcut window"
+msgid "General"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:51
+msgctxt "shortcut window"
+msgid "Quit"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:52
+msgctxt "shortcut window"
+msgid "New window"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:53
+msgctxt "shortcut window"
+msgid "Close window"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:54
+msgctxt "shortcut window"
+msgid "Keyboard Shortcuts"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:61
+msgctxt "shortcut window"
+msgid "Editor"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:63
+msgctxt "shortcut window"
+msgid "Open"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:64
+msgctxt "shortcut window"
+msgid "Save"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:65
+msgctxt "shortcut window"
+msgid "Save As…"
+msgstr ""
+
+#: ../lib/paper_clip/shortcuts_dialog.rb:66
+msgctxt "shortcut window"
+msgid "Add a keyword"
+msgstr ""
+
+#: ../lib/paper_clip/window.rb:49
+msgid "Paper Clip"
+msgstr ""
+
+#: ../lib/paper_clip/window.rb:165
+msgid "Select a File"
+msgstr ""
+
+#: ../lib/paper_clip/window.rb:173
+msgid "Open"
+msgstr ""
+
+#: ../lib/paper_clip/window.rb:228
+msgid "Open a Document"
+msgstr ""
+
+#: ../lib/paper_clip/window.rb:231
+msgid "Drag and drop a PDF file here"
+msgstr ""
+
+#: ../lib/paper_clip/window.rb:418
+msgid "Failed to open the document. The provided password is incorrect."
+msgstr ""

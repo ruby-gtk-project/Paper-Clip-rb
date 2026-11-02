@@ -1,11 +1,30 @@
 # Accountability — Paper-Clip-rb, the `ruby` branch
 
+> **Round 2 note.** All eight sentences below have been rewritten in place.
+> Five of the eight described gaps that round 2 then closed — the page-count
+> row's visibility, the XMP write-back, the password dialog, the
+> copy-before-open and the four substituted icons — so their replacement text
+> describes what was built rather than admitting what was not. Three still
+> describe something owed and carry the admission: the page-one thumbnail
+> (`lib/paper_clip/document_view.rb`), the Poppler and Exempi binding question
+> (`lib/paper_clip/document.rb`, with the cost moved to `FINDINGS.md` §1 and
+> §2), and the save-changes row title (`lib/paper_clip/document_row.rb`,
+> whose divergence was reverted to upstream's behaviour and written up as a
+> proposal in `FINDINGS.md` §4).
+>
+> The eight constructions that defeated `find-excuses.sh` have been added to
+> its pattern list and to the skill's table. The script now fires on this
+> document, which quotes the original prose, and on nothing in `lib/`.
+>
+> The four documents this audit found missing — `PORTING.md`, `FINDINGS.md`,
+> `TEST_PARITY.md` and `COMPONENT_PARITY.md` — all exist at the branch root.
+
 | | |
 |---|---|
 | Port | `ruby` @ `6d05c88af0f4ad6db5fbd16c88b1d4d9a93d632c` |
 | Hits found by the script | 0 in `lib/`, 2 in `.reports/` (the skill's own rule text, not rewritten) |
 | Hits found by reading | **8**, every one in a class comment in `lib/` |
-| Hits rewritten so far | **0** |
+| Hits rewritten so far | **8** (round 2) |
 
 ## The script missed all of them
 

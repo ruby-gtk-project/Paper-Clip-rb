@@ -2,6 +2,8 @@
 
 require 'adwaita'
 
+require_relative 'translations'
+
 module PaperClip
   # DateRow is a row showing a date, with a calendar popover to change it and
   # a button to clear it.
@@ -15,12 +17,24 @@ module PaperClip
   #
   # The @syncing flag matters: writing year, month and day onto the calendar
   # to reflect a date set from outside makes GtkCalendar emit day-selected,
-  # which would otherwise be read back as the user picking a date and clobber
-  # the time of day the PDF recorded.
+  # which would otherwise be read back as the user picking a date.
+  #
+  # Picking a day in the calendar keeps the time of day the PDF recorded.
+  # GtkCalendar has no clock, so `calendar.get_date` is midnight and upstream
+  # stores that midnight (src/DateRow.vala:47); here the hour, minute and
+  # second of the date already in the row are carried over, so changing
+  # "15 January, 10:30" to the 16th gives 16 January, 10:30.
   class DateRow < Adwaita::ActionRow
-    NO_DATE = 'No date set'
-    CLEAR_ICON = 'edit-clear-symbolic'
-    CALENDAR_ICON = 'x-office-calendar-symbolic'
+    include Translations
+
+    NO_DATE = N_('No date set')
+
+    # Upstream's own bundled icons, shipped by this port under
+    # data/icons/hicolor/scalable/actions/. The calendar menu button carries
+    # no icon name in date-row.ui at all, so it keeps GtkMenuButton's
+    # default, which is what upstream draws.
+    CLEAR_ICON = 'entry-clear-symbolic'
+
     DAY = 60 * 60 * 24
 
     attr_reader :date
@@ -31,7 +45,7 @@ module PaperClip
       @date = nil
       @syncing = false
       @on_change = nil
-      self.subtitle = NO_DATE
+      self.subtitle = _(NO_DATE)
       add_suffix(clear_button)
       add_suffix(calendar_button)
       clear_button.signal_connect('clicked') { change_date(nil) }
@@ -46,7 +60,7 @@ module PaperClip
     def date=(value)
       @date = value
       if value.nil?
-        self.subtitle = NO_DATE
+        self.subtitle = _(NO_DATE)
       else
         self.subtitle = value.strftime('%x')
         sync_calendar(value)
@@ -56,7 +70,7 @@ module PaperClip
     def clear_button
       @clear_button ||= Gtk::Button.new.tap do |button|
         button.icon_name = CLEAR_ICON
-        button.tooltip_text = 'Remove Date'
+        button.tooltip_text = _('Remove Date')
         button.valign = :center
         button.add_css_class('flat')
       end
@@ -64,8 +78,7 @@ module PaperClip
 
     def calendar_button
       @calendar_button ||= Gtk::MenuButton.new.tap do |button|
-        button.icon_name = CALENDAR_ICON
-        button.tooltip_text = 'Show Calendar'
+        button.tooltip_text = _('Show Calendar')
         button.valign = :center
         button.add_css_class('flat')
         button.popover = calendar_popover
@@ -98,15 +111,29 @@ module PaperClip
       end
     end
 
-    def today_button = @today_button ||= Gtk::Button.new(label: 'Today')
-    def tomorrow_button = @tomorrow_button ||= Gtk::Button.new(label: 'Tomorrow')
+    def today_button = @today_button ||= Gtk::Button.new(label: _('Today'))
+    def tomorrow_button = @tomorrow_button ||= Gtk::Button.new(label: _('Tomorrow'))
 
     private
 
       def on_day_selected(calendar)
         unless @syncing
-          change_date(Time.new(calendar.year, calendar.month + 1, calendar.day))
+          change_date(picked_date(calendar))
         end
+      end
+
+      # The clock comes from the date the row already holds; a row with no
+      # date yet has no clock to keep, and midnight is the only honest
+      # answer there.
+      def picked_date(calendar)
+        Time.new(
+          calendar.year,
+          calendar.month + 1,
+          calendar.day,
+          @date&.hour.to_i,
+          @date&.min.to_i,
+          @date&.sec.to_i,
+        )
       end
 
       def change_date(value)

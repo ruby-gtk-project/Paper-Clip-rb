@@ -2,6 +2,8 @@
 
 require 'adwaita'
 
+require_relative 'translations'
+
 module PaperClip
   # AboutDialog is the about window, debug information included.
   #
@@ -10,12 +12,19 @@ module PaperClip
   # application, so the people who wrote it are still the developers and the
   # artist — with the port itself named separately.
   #
-  # The debug block upstream prints lists the versions of every library it
-  # links against. The ones this port does not use (Poppler and Exempi, whose
-  # work the Document model does itself) are left out, and the Ruby and
-  # ruby-gnome versions are added, because those are what a bug report against
-  # this port needs.
+  # `translator_credits` is set, from upstream's own msgid, so the eighteen
+  # catalogues' credits lines reach the dialog (src/application.vala:191).
+  #
+  # The debug block lists every library a bug report needs. I did not keep
+  # upstream's Poppler and Exempi lines, because this port links neither: it
+  # parses the PDF itself (see Document) and edits the XMP packet as XML (see
+  # XmpPacket), so there is no version of either to print. That is a real
+  # difference in what a bug report can say, and it is written down in
+  # FINDINGS.md as the cost of the two bindings being unavailable rather than
+  # left implicit here. GdkPixbuf is printed, because the port does link it.
   module AboutDialog
+    include Translations
+
     APP_ID = 'io.github.diegoivan.pdf_metadata_editor'
     APP_NAME = 'Paper Clip'
     VERSION = '0.1.0'
@@ -25,7 +34,8 @@ module PaperClip
     ARTISTS = ['Brage Fuglseth'].freeze
     WEBSITE = 'https://github.com/Diego-Ivan/Paper-Clip'
     ISSUE_URL = 'https://github.com/ruby-gtk-project/Paper-Clip-rb/issues'
-    COMMENTS = 'A Ruby GTK4 and Libadwaita port of Paper Clip, the PDF metadata editor.'
+
+    UNKNOWN_VERSION = 'unknown'
 
     def self.build
       Adwaita::AboutDialog.new.tap do |about|
@@ -36,7 +46,8 @@ module PaperClip
         about.developer_name = DEVELOPER_NAME
         about.developers = DEVELOPERS
         about.artists = ARTISTS
-        about.comments = COMMENTS
+        # TRANSLATORS: Write your name<email> here :D
+        about.translator_credits = _('translator_credits')
         about.website = WEBSITE
         about.issue_url = ISSUE_URL
         about.license_type = Gtk::License::GPL_3_0
@@ -50,17 +61,19 @@ module PaperClip
         Libraries:
         Gtk #{gtk_version} (Runtime)
         Libadwaita #{adwaita_version} (Runtime)
+        GdkPixbuf #{pixbuf_version} (Runtime)
         Ruby #{RUBY_VERSION} #{RUBY_PLATFORM}
+        Poppler: not linked — this port parses the PDF itself
+        Exempi: not linked — this port edits the XMP packet as XML
 
         Running under Flatpak? #{flatpak?}
         OS Information? #{os_name}
       INFO
     end
 
-    UNKNOWN_VERSION = 'unknown'
-
     def self.gtk_version = version_of(Gtk)
     def self.adwaita_version = version_of(Adwaita)
+    def self.pixbuf_version = version_of(GdkPixbuf)
 
     # Which constants carry a library's version differs between the ruby-gnome
     # bindings, so the three spellings in circulation are all tried before
@@ -84,7 +97,7 @@ module PaperClip
     def self.os_name
       ::File.read('/etc/os-release')[/^PRETTY_NAME="?([^"\n]*)"?/, 1].to_s
     rescue SystemCallError
-      'unknown'
+      UNKNOWN_VERSION
     end
   end
 end

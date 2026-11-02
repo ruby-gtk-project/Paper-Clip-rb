@@ -5,6 +5,7 @@ require 'adwaita'
 
 require_relative 'about_dialog'
 require_relative 'style'
+require_relative 'translations'
 require_relative 'save_changes_dialog'
 require_relative 'window'
 
@@ -28,9 +29,28 @@ module PaperClip
   # Adwaita::Application is still broken in these bindings, so the
   # application object is a Gtk::Application with Adwaita.init called before
   # any widget exists.
+  #
+  # Startup does the two things upstream's startup and constructor do besides
+  # loading the stylesheet: it binds the GLib side of the text domain, which
+  # is what translates the gschema, the desktop entry and the metainfo
+  # (src/application.vala:29-30 — the Ruby side is bound in Translations), and
+  # it puts the port's own icon directory on the GtkIconTheme search path,
+  # which is the filesystem equivalent of upstream's gresource icon prefix in
+  # src/pdf-metadata-editor.gresource.xml. Without it the five bundled
+  # symbolic icons and the application icon are missing-image placeholders.
+  #
+  # Upstream also calls Xmp.init and Xmp.terminate here; this port has no
+  # exempi binding and no global state to initialise, because XmpPacket is
+  # pure Ruby.
   class Application
+    include Translations
+
     APP_ID = 'io.github.diegoivan.pdf_metadata_editor'
     PDF_MIME = 'application/pdf'
+
+    # Installed beside lib/, which is where the flake's installPhase copies
+    # data/ to.
+    ICON_DIRECTORY = ::File.expand_path('../../data/icons', __dir__)
 
     ACTIONS = {
       'about'      => [],
@@ -47,7 +67,7 @@ module PaperClip
 
     def build
       app.tap do |a|
-        a.signal_connect('startup') { Style.apply }
+        a.signal_connect('startup') { on_startup }
         a.signal_connect('activate') { on_activate }
         a.signal_connect('open') { |_, files, _hint| on_open(files) }
 
@@ -66,6 +86,23 @@ module PaperClip
       def build_app
         Adwaita.init
         Gtk::Application.new(@app_id, @flags)
+      end
+
+      def on_startup
+        Translations.bind_glib_domain
+        register_icons
+        Style.apply
+      end
+
+      # add_search_path and not add_resource_path: the icons are installed as
+      # files under data/icons, in the hicolor layout the icon-theme
+      # specification describes.
+      def register_icons
+        Gdk::Display.default.then do |display|
+          if display
+            Gtk::IconTheme.for_display(display).add_search_path(ICON_DIRECTORY)
+          end
+        end
       end
 
       def setup_actions
@@ -97,9 +134,19 @@ module PaperClip
       # Upstream opens one window per file and skips anything that is not a
       # PDF rather than failing the whole invocation.
       def on_open(files)
-        Array(files).select { |file| pdf?(file) }
-                    .each { |file| open_in_window(file) }
+        Array(files).each { |file| open_or_refuse(file) }
         on_activate
+      end
+
+      # Upstream logs the file it refused (src/application.vala:105), so a
+      # user who double-clicks a .txt associated by accident gets a line they
+      # can find rather than silence.
+      def open_or_refuse(file)
+        if pdf?(file)
+          open_in_window(file)
+        else
+          warn("File #{file.path} is not a PDF")
+        end
       end
 
       def open_in_window(file)

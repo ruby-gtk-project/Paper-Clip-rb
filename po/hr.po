@@ -1,0 +1,380 @@
+# Croatian translations for pdf_metadata_editor package.
+# Copyright (C) 2023 THE pdf_metadata_editor'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the pdf_metadata_editor package.
+# Milo Ivir <mail@milotype.de>, 2023.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: pdf_metadata_editor\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-01-27 21:42-0600\n"
+"PO-Revision-Date: 2024-02-21 18:20+0100\n"
+"Last-Translator: Milo Ivir <mail@milotype.de>\n"
+"Language-Team: \n"
+"Language: hr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+"X-Generator: Poedit 3.0\n"
+
+#: data/io.github.diegoivan.pdf_metadata_editor.desktop.in:3
+#: data/io.github.diegoivan.pdf_metadata_editor.appdata.xml.in:7
+msgid "Paper Clip"
+msgstr "Paper Clip"
+
+#: data/io.github.diegoivan.pdf_metadata_editor.desktop.in:8
+msgid "PDF;Metadata;Editor;"
+msgstr "PDF;metapodaci;uređivač;"
+
+#: data/io.github.diegoivan.pdf_metadata_editor.appdata.xml.in:8
+msgid "Edit PDF document metadata"
+msgstr "Uredi metapodatke PDF dokumenata"
+
+#: data/io.github.diegoivan.pdf_metadata_editor.appdata.xml.in:10
+msgid "Edit the title, author, keywords and more details of your PDF documents"
+msgstr "Uredi naslov, autora, ključne riječi i druge podatke PDF dokumenata"
+
+#. translators: Write your name<email> here :D
+#: src/application.vala:164
+msgid "translator_credits"
+msgstr "Milo Ivir <mail@milotype.de>, 2023, 2024"
+
+#: src/window.ui:20
+msgid "Select a File"
+msgstr "Odaberi datoteku"
+
+#: src/window.ui:24
+msgid "Open"
+msgstr "Otvori"
+
+#: src/window.ui:86
+msgid "Open a Document"
+msgstr "Otvori dokument"
+
+#: src/window.ui:95
+msgid "Drag and drop a PDF file here"
+msgstr "Povuci i ispusti PDF dokument ovdje"
+
+#: src/window.ui:153
+msgid "_New Window"
+msgstr "_Novi prozor"
+
+#: src/window.ui:159 src/gtk/save-changes-dialog.ui:13
+msgid "_Save"
+msgstr "_Spremi"
+
+#: src/window.ui:165
+msgid "Save _As…"
+msgstr "Spremi _kao …"
+
+#: src/window.ui:171
+msgid "Open _With…"
+msgstr "Otvori pomoću …"
+
+#: src/window.ui:178
+msgid "_Keyboard Shortcuts"
+msgstr "_Tipkovni prečaci"
+
+#: src/window.ui:182
+msgid "_About Paper Clip"
+msgstr "O _aplikciji Paper Clip"
+
+#: src/DateRow.vala:34
+msgid "No date set"
+msgstr "Datum nije postavljen"
+
+#: src/Document.vala:117
+msgid "Unknown"
+msgstr "Nepoznat"
+
+#: src/Document.vala:298
+msgid "Pages in one column"
+msgstr "Stranice u jednom stupcu"
+
+#: src/Document.vala:301
+msgid "One page at a time"
+msgstr "Pojedinačne stranice"
+
+#: src/Document.vala:304
+msgid "Odd numbered pages on the left"
+msgstr "Neparne stranice lijevo"
+
+#: src/Document.vala:307
+msgid "Odd numbered pages on the right"
+msgstr "Neparne stranice desno"
+
+#: src/Document.vala:310
+msgid "Two odd numbered pages on the left"
+msgstr "Dvije neparne stranice lijevo"
+
+#: src/Document.vala:313
+msgid "Two odd numbered pages on the right"
+msgstr "Dvije neparne stranice desno"
+
+#: src/Document.vala:317
+msgid "No specific layout"
+msgstr "Bez određenog rasporeda"
+
+#: src/Document.vala:326
+msgid "Center document's window"
+msgstr "Centriraj prozor dokumenta"
+
+#: src/Document.vala:330
+msgid "Reading order is right to left"
+msgstr "Smjer čitanja je slijeva nadesno"
+
+#: src/Document.vala:334
+msgid "Display document's title"
+msgstr "Prikaži naslov dokumenta"
+
+#: src/Document.vala:338
+msgid "Fit document to window"
+msgstr "Prilagodi dokument veličini prozora"
+
+#: src/Document.vala:342
+msgid "Hide window menubar"
+msgstr "Sakrij traku izbornika"
+
+#: src/Document.vala:346
+msgid "Hide window toolbars"
+msgstr "Sakrij traku alata"
+
+#: src/Document.vala:350
+msgid "Hide UI elements"
+msgstr "Sakrij elemente korisničkog sučelja"
+
+#: src/Document.vala:354
+msgid "No preferences"
+msgstr "Bez postavki"
+
+#: src/Document.vala:365
+msgid "Adding notes"
+msgstr "Dodavanje bilježaka"
+
+#: src/Document.vala:369
+msgid "Inserting elements"
+msgstr "Umetanje elemenata"
+
+#: src/Document.vala:373
+msgid "Copying"
+msgstr "Kopiranje"
+
+#: src/Document.vala:377
+msgid "Extracting contents"
+msgstr "Izdvajanje sadržaja"
+
+#: src/Document.vala:381
+msgid "Filling interactive forms"
+msgstr "Ispunjavanje interaktivnih obrazaca"
+
+#: src/Document.vala:385
+msgid "Modifying"
+msgstr "Mijenjanje"
+
+#: src/Document.vala:389
+msgid "Printing"
+msgstr "Ispis"
+
+#: src/Document.vala:393
+msgid "Printing in high resolution"
+msgstr "Ispis u visokoj rezoluciji"
+
+#: src/Document.vala:402
+msgid "Flip on the long edge"
+msgstr "Preokreni po dugom rubu"
+
+#: src/Document.vala:405
+msgid "Flip on the short edge"
+msgstr "Preokreni po kratkom rubu"
+
+#: src/Document.vala:408
+msgid "Only single sided"
+msgstr "Samo jednostrano"
+
+#: src/Document.vala:412
+msgid "No preference"
+msgstr "Bez postavke"
+
+#: src/Document.vala:436
+msgid "Not compliant"
+msgstr "Nije u skladu"
+
+#: src/KeywordList.vala:55
+msgid "Keyword"
+msgstr "Ključna riječ"
+
+#: src/KeywordList.vala:92
+msgid "Add Keyword"
+msgstr "Dodaj ključnu riječ"
+
+#: src/KeywordRow.vala:29
+msgid "Delete Keyword"
+msgstr "Izbriši ključnu riječ"
+
+#: src/gtk/date-row.ui:8
+msgid "Remove Date"
+msgstr "Ukloni datum"
+
+#: src/gtk/date-row.ui:20
+msgid "Show Calendar"
+msgstr "Pokaži kalendar"
+
+#: src/gtk/date-row.ui:49
+msgid "Today"
+msgstr "Danas"
+
+#: src/gtk/date-row.ui:56
+msgid "Tomorrow"
+msgstr "Sutra"
+
+#: src/gtk/details-list.ui:15
+msgid "Format"
+msgstr "Format"
+
+#: src/gtk/details-list.ui:25
+msgid "Layout"
+msgstr "Raspored"
+
+#: src/gtk/details-list.ui:35
+msgid "Duplex"
+msgstr "Obostrano"
+
+#: src/gtk/details-list.ui:45
+msgid "Subtype"
+msgstr "Podvrsta"
+
+#: src/gtk/details-list.ui:55
+msgid "Viewer Preferences"
+msgstr "Postavke prikaza"
+
+#: src/gtk/details-list.ui:62
+msgid "Permissions"
+msgstr "Dozvole"
+
+#: src/gtk/document-view.ui:45
+msgid "Title"
+msgstr "Naslov"
+
+#: src/gtk/document-view.ui:51
+msgid "Author"
+msgstr "Autor"
+
+#: src/gtk/document-view.ui:57
+msgid "Creation Software"
+msgstr "Softver izvornog dokumenta"
+
+#: src/gtk/document-view.ui:63
+msgid "Subject"
+msgstr "Predmet"
+
+#: src/gtk/document-view.ui:69
+msgid "Conversion Software"
+msgstr "Softver korišten za konverziju"
+
+#: src/gtk/document-view.ui:75
+msgid "Creation Date"
+msgstr "Datum stvaranja"
+
+#: src/gtk/document-view.ui:81
+msgid "Modification Date"
+msgstr "Datum promjene"
+
+#: src/gtk/document-view.ui:94
+msgid "Non-Editable Properties"
+msgstr "Nepromjenjiva svojstva"
+
+#: src/gtk/keyword-list.ui:6
+msgid "Keywords"
+msgstr "Ključne riječi"
+
+#: src/gtk/keyword-list.ui:12
+msgid "Add a keyword"
+msgstr "Dodaj ključnu riječ"
+
+#: src/gtk/save-changes-dialog.ui:6
+msgid "Save Changes?"
+msgstr "Spremiti promjene?"
+
+#: src/gtk/save-changes-dialog.ui:7
+msgid ""
+"Open documents contain unsaved changes. Changes which are not saved will be "
+"permanently lost."
+msgstr ""
+"Otvoreni dokumenti sadrže nespremljene promjene. Promjene koje nisu "
+"spremljene će se zauvijek izgubiti."
+
+#: src/gtk/save-changes-dialog.ui:11
+msgid "_Cancel"
+msgstr "_Odustani"
+
+#: src/gtk/save-changes-dialog.ui:12
+msgid "_Discard"
+msgstr "O_dbaci"
+
+#: src/gtk/shortcut-window.ui:11
+msgctxt "shortcut window"
+msgid "General"
+msgstr "Opće"
+
+#: src/gtk/shortcut-window.ui:14
+msgctxt "shortcut window"
+msgid "Quit"
+msgstr "Zatvori aplikaciju"
+
+#: src/gtk/shortcut-window.ui:21
+msgctxt "shortcut window"
+msgid "New window"
+msgstr "Novi prozor"
+
+#: src/gtk/shortcut-window.ui:28
+msgctxt "shortcut window"
+msgid "Close window"
+msgstr "Zatvori prozor"
+
+#: src/gtk/shortcut-window.ui:35
+msgctxt "shortcut window"
+msgid "Keyboard Shortcuts"
+msgstr "Tipkovni prečaci"
+
+#: src/gtk/shortcut-window.ui:43
+msgctxt "shortcut window"
+msgid "Editor"
+msgstr "Uređivač"
+
+#: src/gtk/shortcut-window.ui:47
+msgctxt "shortcut window"
+msgid "Open"
+msgstr "Otvori"
+
+#: src/gtk/shortcut-window.ui:54
+msgctxt "shortcut window"
+msgid "Save"
+msgstr "Spremi"
+
+#: src/gtk/shortcut-window.ui:61
+msgctxt "shortcut window"
+msgid "Save As…"
+msgstr "Spremi kao …"
+
+#: src/gtk/shortcut-window.ui:68
+msgctxt "shortcut window"
+msgid "Add a keyword"
+msgstr "Dodaj ključnu riječ"
+
+#: src/gtk/password-dialog.ui:10
+msgid "Password Dialog"
+msgstr "Dijalog za lozinku"
+
+#: src/gtk/password-dialog.ui:21
+msgid "This Document Is Encrypted"
+msgstr "Ovaj je dokument šifriran"
+
+#: src/gtk/password-dialog.ui:37
+msgid "Password"
+msgstr "Lozinka"
+
+#: src/gtk/password-dialog.ui:44
+msgid "Decrypt"
+msgstr "Dešifriraj"

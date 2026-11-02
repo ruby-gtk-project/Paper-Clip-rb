@@ -3,25 +3,38 @@
 require 'adwaita'
 
 require_relative 'application'
+require_relative 'translations'
 
 module PaperClip
   # Main is the entry point.
   #
   # Ported from upstream's src/main.vala, which is four lines — construct the
   # application and run it — plus the OptionEntry[] table upstream's
-  # Application constructor registers and handles in handle_local_options:
+  # Application constructor registers (src/application.vala:45-50) and
+  # handles in handle_local_options.
   #
-  #   -w, --new-window   Open a new window
-  #   -v, --version      Print version information and exit
+  # The two options are registered on the GApplication, so `paper-clip --help`
+  # prints them with their descriptions, translated, exactly as upstream's
+  # does. They were previously described only in this comment, which meant
+  # --help documented neither flag.
   #
-  # Those two are handled here rather than inside the application, because
-  # --version must print without ever registering with the session bus, and
-  # --new-window is a request aimed at an instance that is already running:
-  # it is passed through as the app.new-window action so a second launch
-  # raises a window on the first process instead of starting a new one.
+  # --version is still answered here rather than in the application's own
+  # handler, because it must print without registering with the session bus;
+  # --new-window is a request aimed at an instance that may already be
+  # running, so it goes through --gapplication-action and raises a window on
+  # the first process instead of starting a second one.
   module Main
+    include Translations
+
     VERSION_FLAGS = ['-v', '--version'].freeze
     NEW_WINDOW_FLAGS = ['-w', '--new-window'].freeze
+
+    # name, short letter, description — upstream's table, with upstream's two
+    # N_() descriptions.
+    OPTIONS = [
+      ['new-window', 'w', N_('Open a new window')],
+      ['version', 'v', N_('Print version information and exit')],
+    ].freeze
 
     def self.run(argv = ARGV)
       if VERSION_FLAGS.any? { |flag| argv.include?(flag) }
@@ -37,7 +50,26 @@ module PaperClip
     end
 
     def self.start(argv)
-      Application.new.build.run(['paper-clip'] + remaining(argv) + action_arguments(argv))
+      Application.new.then do |application|
+        application.build
+        add_options(application.app)
+        application.run(['paper-clip'] + remaining(argv) + action_arguments(argv))
+      end
+    end
+
+    # GApplication's own --help lists whatever has been added here, which is
+    # the only way either flag gets a line in it.
+    def self.add_options(app)
+      OPTIONS.each do |name, letter, description|
+        app.add_main_option(
+          name,
+          letter.ord,
+          GLib::OptionFlags::NONE,
+          GLib::OptionArg::NONE,
+          _(description),
+          nil,
+        )
+      end
     end
 
     def self.remaining(argv)

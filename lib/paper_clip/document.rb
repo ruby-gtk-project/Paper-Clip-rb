@@ -1,38 +1,71 @@
 # frozen_string_literal: true
 
-require 'adwaita'
+require 'gio2'
+require 'fileutils'
+require 'tmpdir'
 require 'zlib'
 
+require_relative 'pdf_crypt'
 require_relative 'pdf_strings'
 require_relative 'thread_manager'
+require_relative 'xmp_packet'
 
 module PaperClip
   # Document is the PDF whose metadata the editor shows and writes back.
   #
   # Ported from upstream's src/Document.vala. Upstream leans on Poppler for
   # reading and writing the Info dictionary and on Exempi for the XMP packet.
-  # Neither library has Ruby bindings available here — there is no Poppler
-  # typelib on the system and no exempi binding at all — so this port reads
-  # and writes the PDF itself:
   #
-  # * reading scans the file for `N G obj … endobj` blocks, inflating
-  #   /Type /ObjStm object streams so dictionaries that were compressed are
-  #   visible too, and takes the /Info and /Root the newest trailer names.
-  #   Later definitions win, which is what an incremental update means;
-  # * writing appends an incremental update: the original bytes untouched,
-  #   then a fresh Info dictionary, then a cross-reference section of the same
-  #   flavour the file already uses chained to the old one through /Prev. A
-  #   file this port only partly understands therefore still survives an edit;
-  # * the XMP packet is read for the PDF subtype and for has_xmp?, as upstream
-  #   does. It is *not* rewritten on save: the editable metadata goes into the
-  #   Info dictionary, which is what every reader displays.
+  # I could not load Poppler through gobject-introspection the way the adwaita
+  # gem loads its own typelib: there is no `Poppler-0.18.typelib` anywhere on
+  # this system and no `poppler` gem in the bundle, so `GObjectIntrospection::
+  # Loader.load("Poppler", …)` raises before it can register a single symbol.
+  # What that still costs the user is the page-one thumbnail, which is
+  # recorded as owed in `FINDINGS.md` with the cost of closing it, and named
+  # in the comment on DocumentView that describes the gap. libexempi has no
+  # Ruby binding either, so the XMP packet is edited as the XML it is — see
+  # XmpPacket — rather than left unwritten.
   #
-  # Encrypted documents raise EncryptedError rather than opening: their
-  # strings are ciphertext, and this port carries no crypto layer, so showing
-  # them would mean showing mojibake and saving would mean corrupting them.
+  # So this port reads and writes the PDF itself:
+  #
+  # * reading copies the original into `$TMPDIR/copies` first, exactly as
+  #   upstream's create_copy_from_original does (src/Document.vala:467-495),
+  #   and parses and mutates that copy. A save writes the copy out to the
+  #   chosen path, so a failed or interrupted write damages a temporary file
+  #   and never the only copy the user has;
+  # * the scan finds `N G obj … endobj` blocks, inflating /Type /ObjStm
+  #   object streams so dictionaries that were compressed are visible too,
+  #   and takes the /Info and /Root the newest trailer names. Later
+  #   definitions win, which is what an incremental update means;
+  # * writing appends an incremental update: the cached bytes untouched, then
+  #   a fresh Info dictionary, then a rewritten /Metadata stream when the file
+  #   has one, then a cross-reference section of the same flavour the file
+  #   already uses chained to the old one through /Prev. A file this port only
+  #   partly understands therefore still survives an edit;
+  # * an encrypted document opens: PdfCrypt derives the file key from the
+  #   password, strings in the Info dictionary are decrypted on the way in and
+  #   re-encrypted on the way out, and a file whose password is not yet known
+  #   raises EncryptedError so the window can raise the PasswordDialog;
+  # * the XMP packet is mirrored on save whenever the file has one, which is
+  #   what upstream's save_xmp does (src/Document.vala:227-270): Producer,
+  #   CreatorTool, Keywords, dc:title, CreateDate, ModifyDate and a fresh
+  #   MetadataDate, with the two dates deleted rather than blanked when the
+  #   row is empty.
   class Document
     Error = Class.new(StandardError)
     EncryptedError = Class.new(Error)
+
+    # A PDF text string, decoded for display with its original bytes kept:
+    # /O, /U and anything the security handler touches is key material, and
+    # only the bytes will do.
+    class PdfText < String
+      attr_reader :raw
+
+      def initialize(text, raw)
+        super(text)
+        @raw = raw
+      end
+    end
 
     # An indirect reference, `N G R` in the file.
     Reference = Data.define(:number, :generation)
@@ -48,6 +81,10 @@ module PaperClip
     # trailer dictionary is a few hundred bytes at the very most.
     TRAILER_WINDOW = 4096
 
+    # Where the copy of the original goes. Upstream builds the same path with
+    # Path.build_path (src/Document.vala:471-473).
+    COPIES_DIRECTORY = 'copies'
+
     # The Info keys the editor owns, in the order PDF writers conventionally
     # emit them. Only these are written back, so a /Trapped name or a private
     # key in the original is left to the copy that still holds it.
@@ -62,13 +99,13 @@ module PaperClip
 
     PDF_DATE = /\AD?:?(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?/
 
-    attr_reader :original_file, :keywords
+    attr_reader :original_file, :cached_path, :keywords
 
     # Parsing a large PDF takes long enough to drop frames, so the window
     # opens documents through this rather than calling new directly — the
     # same reason upstream's constructor is async.
-    def self.open(file, on_done:, on_error:)
-      ThreadManager.run_in_thread(on_done: on_done, on_error: on_error) { new(file) }
+    def self.open(file, on_done:, on_error:, password: nil)
+      ThreadManager.run_in_thread(on_done: on_done, on_error: on_error) { new(file, password) }
     end
 
     # PDF date strings are `D:YYYYMMDDHHmmSSOHH'mm'`, with everything after
@@ -92,16 +129,20 @@ module PaperClip
       "#{time.strftime('D:%Y%m%d%H%M%S')}#{time.strftime('%z').insert(3, "'")}'"
     end
 
-    def initialize(file)
+    def initialize(file, password = nil)
       @original_file = file
+      @password = password
       @observers = []
-      @bytes = File.binread(path).freeze
+      @keyword_observers = []
+      @cached_path = create_copy_from_original
+      @bytes = ::File.binread(@cached_path).freeze
       @objects = {}
+      @generations = {}
       @parsed = {}
       @trailer = {}
       scan_objects
       scan_trailers
-      reject_encrypted
+      unlock_or_refuse
       expand_object_streams
       @info = load_info
       @keywords = split_keywords(@info['Keywords'])
@@ -110,6 +151,11 @@ module PaperClip
     def path = @original_file.path
     def uri = @original_file.uri
     def basename = ::File.basename(path)
+
+    # The copy in $TMPDIR/copies, which is the file this object actually
+    # parsed and the one a save writes out. Upstream exposes the same thing
+    # as Document.cached_file (src/Document.vala:464).
+    def cached_file = @cached_file ||= Gio::File.new_for_path(@cached_path)
 
     # --- Editable metadata --------------------------------------------------
 
@@ -155,6 +201,7 @@ module PaperClip
     def add_keyword(keyword)
       @keywords << keyword.to_s
       notify_change
+      notify_keywords(@keywords.length - 1, 0, 1)
     end
 
     # Upstream removes by value; the editor removes by index, because two
@@ -170,6 +217,7 @@ module PaperClip
     def remove_keyword_at(index)
       @keywords.delete_at(index)
       notify_change
+      notify_keywords(index, 1, 0)
     end
 
     def update_keyword(index, keyword)
@@ -186,7 +234,7 @@ module PaperClip
         if match
           "PDF-#{match[1]}"
         else
-          PdfStrings::UNKNOWN
+          PdfStrings.unknown
         end
       end
     end
@@ -225,8 +273,22 @@ module PaperClip
       @observers << block
     end
 
+    # The counterpart of items-changed on upstream's keyword ListStore, which
+    # KeywordList connects to (src/KeywordList.vala:38). It carries the same
+    # three arguments, and like items-changed it fires only when the number of
+    # keywords changes — editing the text of one is a change to the document
+    # and not to the list, so a row being typed into is never rebuilt.
+    def on_keywords_changed(&block)
+      @keyword_observers << block
+    end
+
     # --- Saving -------------------------------------------------------------
 
+    # Upstream's save_thread writes the cached copy out to the chosen URI and
+    # then mirrors the XMP packet into it (src/Document.vala:217-225). Here
+    # both happen in one write: the cached bytes, the new Info dictionary, the
+    # rewritten /Metadata stream when there is one, and the cross-reference
+    # section that points at them.
     def save(target_path)
       ::File.binwrite(target_path, @bytes + update_section)
     end
@@ -237,8 +299,78 @@ module PaperClip
 
     private
 
+      # --- The cached copy ---------------------------------------------------
+
+      # Upstream shells out to `cp` through a SubprocessLauncher
+      # (src/Document.vala:482); FileUtils.cp is the same copy without the
+      # fork. The basename is upstream's too, so reopening the same document
+      # overwrites its own copy rather than filling $TMPDIR.
+      def create_copy_from_original
+        copies_directory.then do |directory|
+          ::File.join(directory, ::File.basename(@original_file.path)).tap do |destination|
+            FileUtils.cp(@original_file.path, destination)
+          end
+        end
+      end
+
+      def copies_directory
+        ::File.join(Dir.tmpdir, COPIES_DIRECTORY).tap do |directory|
+          FileUtils.mkdir_p(directory, mode: 0o700)
+        end
+      end
+
+      # --- Encryption --------------------------------------------------------
+
+      # Poppler tries the empty password before it reports a file as
+      # encrypted, which is why a document with an owner password but no user
+      # password opens with no dialog at all. A file that needs a password the
+      # caller does not have raises, and the window turns that into the
+      # PasswordDialog or — when it had already supplied one — into upstream's
+      # "the provided password is incorrect" toast.
+      def unlock_or_refuse
+        if @trailer.key?('Encrypt')
+          @crypt = PdfCrypt.open(resolve(@trailer['Encrypt']), file_id, @password)
+          if @crypt.nil?
+            raise EncryptedError, "#{basename} is encrypted"
+          end
+        end
+      end
+
+      # The first element of the trailer's /ID array, which is key material
+      # and so is taken as bytes rather than as the decoded text.
+      def file_id
+        Array(@trailer['ID']).first.then do |value|
+          if value.respond_to?(:raw)
+            value.raw
+          else
+            value.to_s.b
+          end
+        end
+      end
+
+      # Walks a parsed value and replaces every string with its plaintext.
+      # The Info dictionary is the only thing this port decrypts, because it
+      # is the only thing it shows.
+      def decrypt_strings(value, number, generation)
+        case value
+        when PdfText then decrypted_text(value, number, generation)
+        when Hash then value.transform_values { |item| decrypt_strings(item, number, generation) }
+        when Array then value.map { |item| decrypt_strings(item, number, generation) }
+        else value
+        end
+      end
+
+      def decrypted_text(value, number, generation)
+        @crypt.decrypt_string(value.raw, number, generation)
+               .then { |plain| Reader.decode_text(plain) }
+      end
+
       def notify_change
         @observers.each(&:call)
+      end
+
+      def notify_keywords(position, removed, added)
+        @keyword_observers.each { |observer| observer.call(position, removed, added) }
       end
 
       def write_entry(key, value)
@@ -268,9 +400,12 @@ module PaperClip
         @bytes.to_enum(:scan, OBJECT).each do
           ::Regexp.last_match.then do |match|
             @objects[match[1].to_i] = body_after(match.end(0))
+            @generations[match[1].to_i] = match[2].to_i
           end
         end
       end
+
+      def generation_of(number) = @generations.fetch(number, 0)
 
       def body_after(start)
         @bytes.index('endobj', start).then do |finish|
@@ -322,14 +457,14 @@ module PaperClip
         @objects.select { |_, body| body.include?('/ObjStm') }.each do |number, body|
           object(number).then do |dict|
             if dict.is_a?(Hash) && dict['Type'] == 'ObjStm'
-              register_object_stream(body, dict)
+              register_object_stream(body, dict, number)
             end
           end
         end
       end
 
-      def register_object_stream(body, dict)
-        payload = decompress(raw_stream(body, dict).to_s, dict)
+      def register_object_stream(body, dict, number)
+        payload = decompress(decrypt_stream(raw_stream(body, dict).to_s, number), dict)
         first = resolve(dict['First']).to_i
         pairs = payload[0, first].to_s.scan(/\d+/).map(&:to_i)
         resolve(dict['N']).to_i.times do |index|
@@ -396,6 +531,16 @@ module PaperClip
         end
       end
 
+      # A stream in an encrypted file is ciphertext before it is Flate, and
+      # the key depends on the object it lives in.
+      def decrypt_stream(data, number)
+        if @crypt
+          @crypt.decrypt_stream(data, number, generation_of(number))
+        else
+          data
+        end
+      end
+
       # Only /FlateDecode is handled, which is the only filter object and
       # metadata streams are ever written with in practice.
       def decompress(data, dict)
@@ -425,9 +570,29 @@ module PaperClip
       def load_info
         resolve(@trailer['Info']).then do |dict|
           if dict.is_a?(Hash)
-            dict.dup
+            decrypted_info(dict.dup)
           else
             {}
+          end
+        end
+      end
+
+      def decrypted_info(dict)
+        if @crypt
+          info_reference.then do |reference|
+            decrypt_strings(dict, reference.number, reference.generation)
+          end
+        else
+          dict
+        end
+      end
+
+      def info_reference
+        @trailer['Info'].then do |reference|
+          if reference.is_a?(Reference)
+            reference
+          else
+            Reference.new(number: 0, generation: 0)
           end
         end
       end
@@ -495,37 +660,141 @@ module PaperClip
       # that never registered the stream leaves it.
       def extract_xmp = metadata_stream || @bytes[XPACKET] || ''
 
-      def metadata_stream
+      # The object number of the /Metadata stream, or nil when the catalog
+      # does not register one. A save can only rewrite a packet it can name,
+      # so this is also what decides whether the XMP is mirrored.
+      def metadata_number
         catalog['Metadata'].then do |reference|
           if reference.is_a?(Reference) && @objects.key?(reference.number)
-            metadata_payload(reference.number)
+            reference.number
           end
         end
       end
 
+      def metadata_stream
+        metadata_number.then do |number|
+          if number
+            metadata_payload(number)
+          end
+        end
+      end
+
+      # /EncryptMetadata false leaves the packet in the clear so an indexer
+      # can read it without the password, and the handler must then be
+      # skipped rather than applied to plaintext.
       def metadata_payload(number)
         object(number).then do |dict|
           if dict.is_a?(Hash)
-            decompress(raw_stream(@objects[number], dict).to_s, dict)
+            decompress(metadata_bytes(raw_stream(@objects[number], dict).to_s, number), dict)
           end
+        end
+      end
+
+      def metadata_bytes(data, number)
+        if @crypt&.encrypt_metadata?
+          @crypt.decrypt_stream(data, number, generation_of(number))
+        else
+          data
         end
       end
 
       # --- Writing ----------------------------------------------------------
 
+      # The update carries one object always — the new Info dictionary — and
+      # a second when the file has an XMP packet to mirror, which is a fresh
+      # revision of the /Metadata stream under its existing object number.
       def update_section
-        number = @objects.keys.max.to_i + 1
         prefix = "\n".b
-        info_offset = @bytes.bytesize + prefix.bytesize
-        info = "#{number} 0 obj\n#{serialize_info}\nendobj\n".b
-        prefix + info + xref_section(number, info_offset, info_offset + info.bytesize)
+        laid_out = lay_out(updated_objects, @bytes.bytesize + prefix.bytesize)
+        prefix +
+          laid_out.map { |entry| entry.fetch(:bytes) }.join.b +
+          xref_section(laid_out, laid_out.sum { |entry| entry.fetch(:bytes).bytesize } + @bytes.bytesize + prefix.bytesize)
       end
 
-      def xref_section(number, info_offset, xref_offset)
-        if xref_stream?
-          xref_stream(number, info_offset, xref_offset)
+      def updated_objects
+        [info_object].tap do |objects|
+          metadata_object.then do |entry|
+            if entry
+              objects << entry
+            end
+          end
+        end.sort_by { |entry| entry.fetch(:number) }
+      end
+
+      def info_object
+        new_object_number.then do |number|
+          {
+            number: number,
+            body:   "#{number} 0 obj\n#{serialize_info(number)}\nendobj\n",
+          }
+        end
+      end
+
+      def new_object_number = @new_object_number ||= @objects.keys.max.to_i + 1
+
+      # Upstream writes the packet only when has_xmp is true
+      # (src/Document.vala:222); a file with no registered /Metadata stream
+      # has nothing to rewrite, and inventing one would mean inventing a
+      # catalog revision too.
+      def metadata_object
+        metadata_number.then do |number|
+          if number && has_xmp?
+            {
+              number: number,
+              body:   metadata_object_body(number),
+            }
+          end
+        end
+      end
+
+      def metadata_object_body(number)
+        mirrored_xmp.then do |packet|
+          encrypted_metadata(packet, number).then do |payload|
+            "#{number} #{generation_of(number)} obj\n" \
+              "<< /Type /Metadata /Subtype /XML /Length #{payload.bytesize} >>\n" \
+              "stream\n#{payload}\nendstream\nendobj\n"
+          end
+        end
+      end
+
+      # The /Metadata stream goes out uncompressed, which the format permits
+      # and which an XMP-aware reader prefers: the packet is meant to be
+      # findable by scanning the bytes.
+      def encrypted_metadata(packet, number)
+        if @crypt&.encrypt_metadata?
+          @crypt.encrypt_stream(packet.b, number, generation_of(number))
         else
-          xref_table(number, info_offset, xref_offset)
+          packet.b
+        end
+      end
+
+      def mirrored_xmp
+        XmpPacket.new(xmp).mirror(
+          producer:          producer,
+          creator:           creator,
+          keywords:          info_value('Keywords'),
+          title:             title,
+          creation_date:     creation_date,
+          modification_date: modification_date,
+        )
+      end
+
+      # Gives each object its offset in the file being written, which is what
+      # the cross-reference section records.
+      def lay_out(objects, start)
+        offset = start
+        objects.map do |entry|
+          entry.fetch(:body).b.then do |bytes|
+            { number: entry.fetch(:number), bytes: bytes, offset: offset }.tap { offset += bytes.bytesize }
+          end
+        end
+      end
+
+      def xref_section(entries, xref_offset)
+        if xref_stream?
+          xref_stream(entries, xref_offset)
+        else
+          xref_table(entries, xref_offset)
         end
       end
 
@@ -555,52 +824,106 @@ module PaperClip
       end
 
       # Each entry of a classic table is exactly twenty bytes, which is why
-      # the `n` is followed by a space before the newline.
-      def xref_table(number, info_offset, xref_offset)
+      # the `n` is followed by a space before the newline. One subsection per
+      # object, because the two objects an update writes are not adjacent.
+      def xref_table(entries, xref_offset)
         <<~XREF.b
           xref
-          #{number} 1
-          #{info_offset.to_s.rjust(10, '0')} 00000 n#{' '}
-          trailer
-          #{trailer_dictionary(number, number + 1)}
+          #{entries.map { |entry| table_subsection(entry) }.join}trailer
+          #{trailer_dictionary}
           startxref
           #{xref_offset}
           %%EOF
         XREF
       end
 
-      # An /XRef stream holding the two entries this update adds: the new
-      # Info dictionary and the stream object itself. /W is [1 4 2] and the
-      # payload is left uncompressed, which the format permits.
-      def xref_stream(number, info_offset, xref_offset)
-        entries = xref_entry(info_offset) + xref_entry(xref_offset)
-        "#{number + 1} 0 obj\n#{xref_stream_dictionary(number, entries)}\nstream\n".b +
-          entries +
+      def table_subsection(entry)
+        "#{entry.fetch(:number)} 1\n" \
+          "#{entry.fetch(:offset).to_s.rjust(10, '0')} #{generation_field(entry)} n \n"
+      end
+
+      def generation_field(entry)
+        generation_of(entry.fetch(:number)).to_s.rjust(5, '0')
+      end
+
+      # An /XRef stream holding the entries this update adds plus the stream
+      # object itself. /W is [1 4 2] and the payload is left uncompressed,
+      # which the format permits.
+      def xref_stream(entries, xref_offset)
+        stream_number = new_object_number + 1
+        payload = xref_payload(entries, stream_number, xref_offset)
+        "#{stream_number} 0 obj\n#{xref_stream_dictionary(entries, stream_number, payload)}\nstream\n".b +
+          payload +
           "\nendstream\nendobj\nstartxref\n#{xref_offset}\n%%EOF\n".b
       end
 
-      def xref_stream_dictionary(number, entries)
+      def xref_payload(entries, stream_number, xref_offset)
+        xref_rows(entries, stream_number, xref_offset)
+          .map { |number, offset| xref_entry(offset, generation_of(number)) }
+          .join
+          .b
+      end
+
+      def xref_rows(entries, stream_number, xref_offset)
+        entries.map { |entry| [entry.fetch(:number), entry.fetch(:offset)] }
+               .push([stream_number, xref_offset])
+               .sort_by(&:first)
+      end
+
+      def xref_stream_dictionary(entries, stream_number, payload)
         [
           '/Type /XRef',
-          "/Size #{number + 2}",
-          "/Index [#{number} 2]",
+          "/Size #{stream_number + 1}",
+          "/Index [#{xref_index(entries, stream_number)}]",
           '/W [1 4 2]',
           root_entry,
-          "/Info #{number} 0 R",
+          "/Info #{new_object_number} 0 R",
           "/Prev #{previous_start}",
-          "/Length #{entries.bytesize}",
+          "/Length #{payload.bytesize}",
         ].compact.join(' ').then { |body| "<< #{body} >>" }
       end
 
-      def xref_entry(offset) = [1, offset, 0].pack('CNn')
+      def xref_index(entries, stream_number)
+        xref_rows(entries, stream_number, 0).map { |number, _offset| "#{number} 1" }.join(' ')
+      end
 
-      def trailer_dictionary(number, size)
+      def xref_entry(offset, generation) = [1, offset, generation].pack('CNn')
+
+      def trailer_dictionary
         [
-          "/Size #{size}",
+          "/Size #{new_object_number + 1}",
           root_entry,
-          "/Info #{number} 0 R",
+          "/Info #{new_object_number} 0 R",
+          encrypt_entry,
+          id_entry,
           "/Prev #{previous_start}",
         ].compact.join(' ').then { |body| "<< #{body} >>" }
+      end
+
+      # An encrypted file's trailer has to keep naming its security handler
+      # and its /ID, or a reader that follows the new /Prev chain finds a
+      # trailer that says the document is in the clear.
+      def encrypt_entry
+        @trailer['Encrypt'].then do |reference|
+          if reference.is_a?(Reference)
+            "/Encrypt #{reference.number} #{reference.generation} R"
+          end
+        end
+      end
+
+      def id_entry
+        if @crypt
+          Array(@trailer['ID']).map { |value| hex_string(value) }
+                               .then { |values| "/ID [#{values.join(' ')}]" }
+        end
+      end
+
+      def hex_string(value)
+        if value.respond_to?(:raw)
+          "<#{value.raw.unpack1('H*')}>"
+        else
+          "<#{value.to_s.b.unpack1('H*')}>"
+        end
       end
 
       def root_entry
@@ -611,18 +934,18 @@ module PaperClip
         end
       end
 
-      def serialize_info
-        INFO_ORDER.filter_map { |key| info_entry(key) }
+      def serialize_info(number)
+        INFO_ORDER.filter_map { |key| info_entry(key, number) }
                   .join("\n")
                   .then { |body| "<<\n#{body}\n>>" }
       end
 
-      def info_entry(key)
+      def info_entry(key, number)
         info_value(key).then do |value|
           if value.empty?
             nil
           else
-            "/#{key} #{pdf_string(value)}"
+            "/#{key} #{pdf_string(value, number)}"
           end
         end
       end
@@ -639,11 +962,29 @@ module PaperClip
       # ASCII over the range a literal can safely carry, or UTF-16BE behind a
       # byte-order mark. Anything outside ASCII therefore goes out as the
       # latter.
-      def pdf_string(value)
-        if value.ascii_only?
+      #
+      # In an encrypted file the bytes are ciphertext, and ciphertext has no
+      # safe literal form, so it always goes out as hex.
+      def pdf_string(value, number)
+        if @crypt
+          encrypted_string(value, number)
+        elsif value.ascii_only?
           "(#{escape_literal(value)})"
         else
           "<FEFF#{value.encode(Encoding::UTF_16BE).b.unpack1('H*').upcase}>"
+        end
+      end
+
+      def encrypted_string(value, number)
+        @crypt.encrypt_string(plain_bytes(value), number, 0)
+              .then { |cipher| "<#{cipher.unpack1('H*').upcase}>" }
+      end
+
+      def plain_bytes(value)
+        if value.ascii_only?
+          value.b
+        else
+          Reader::BOM.b + value.encode(Encoding::UTF_16BE).b
         end
       end
 
@@ -678,6 +1019,29 @@ module PaperClip
         def initialize(text)
           @text = text
           @pos = 0
+        end
+
+        # PDF text strings are UTF-16BE behind a byte-order mark, or
+        # PDFDocEncoded, which agrees with Latin-1 over the range metadata
+        # uses. The original bytes travel with the result, because the
+        # security handler needs them and because re-encoding a decoded
+        # string is not always the identity.
+        def self.decode_text(raw)
+          raw.dup.force_encoding(Encoding::BINARY).then do |bytes|
+            if bytes.start_with?(BOM.b)
+              PdfText.new(transcode(bytes.byteslice(2..).to_s, Encoding::UTF_16BE), bytes)
+            else
+              PdfText.new(transcode(bytes, Encoding::ISO_8859_1), bytes)
+            end
+          end
+        end
+
+        def self.transcode(bytes, from)
+          bytes.dup.force_encoding(from).encode(
+            Encoding::UTF_8,
+            invalid: :replace,
+            undef:   :replace,
+          )
         end
 
         def value
@@ -909,26 +1273,7 @@ module PaperClip
             end
           end
 
-          # PDF text strings are UTF-16BE behind a byte-order mark, or
-          # PDFDocEncoded, which agrees with Latin-1 over the range metadata
-          # uses.
-          def decode_text(raw)
-            raw.dup.force_encoding(Encoding::BINARY).then do |bytes|
-              if bytes.start_with?(BOM.b)
-                transcode(bytes.byteslice(2..).to_s, Encoding::UTF_16BE)
-              else
-                transcode(bytes, Encoding::ISO_8859_1)
-              end
-            end
-          end
-
-          def transcode(bytes, from)
-            bytes.force_encoding(from).encode(
-              Encoding::UTF_8,
-              invalid: :replace,
-              undef:   :replace,
-            )
-          end
+          def decode_text(raw) = self.class.decode_text(raw)
       end
   end
 end

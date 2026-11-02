@@ -50,3 +50,11 @@ Appraisal.*.gemfile.lock
 # nix/ is the runtime gemdir for flake.nix: bundlerEnv needs its lock and
 # gemset committed or the app cannot be built reproducibly.
 !nix/Gemfile.lock
+
+# Compiled message catalogues, built by `rake gettext:mo:update`.
+/locale/
+
+# The port's own extraction check, written by `rake gettext:pot`. Upstream's
+# po/pdf-metadata-editor.pot is the record of what translators were given and
+# is tracked; this one is a build artefact.
+po/*.port.pot

@@ -11,9 +11,13 @@ module PaperClip
   # filename as the subtitle, and the checkbox checked by default so the
   # dialog's Save button saves everything unless something is unticked.
   #
-  # Upstream shows the title even when it is empty, which leaves a blank row;
-  # a PDF with no /Title is common enough that this falls back to the filename
-  # so the row always says which document it is.
+  # I had changed what this dialog calls each document — falling back to the
+  # filename when /Title is empty — and I did not propose the change upstream,
+  # so this port and the app it is a port of disagreed about what a user sees
+  # at the one moment they are deciding whether to lose their edits. The row
+  # now shows document.title exactly as upstream's does, blank row and all,
+  # and the fallback is written down as a proposal in FINDINGS.md instead of
+  # being shipped as though it had been agreed.
   class DocumentRow < Adwaita::ActionRow
     attr_reader :manager
 
@@ -38,14 +42,6 @@ module PaperClip
       def document = @manager.document
       def basename = ::File.basename(document.path)
 
-      def row_title
-        document.title.then do |title|
-          if title.strip.empty?
-            basename
-          else
-            title
-          end
-        end
-      end
+      def row_title = document.title
   end
 end

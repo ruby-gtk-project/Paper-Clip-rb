@@ -170,3 +170,67 @@ rescue LoadError
     warn("NOTE: stone_checksums isn't installed, or is disabled for #{RUBY_VERSION} in the current environment")
   end
 end
+
+### TRANSLATION TASKS
+# po/ is upstream's donated catalogue, carried across unchanged and in
+# upstream's flat `po/<lang>.po` layout. GetText::Tools::Task is not used:
+# it assumes `po/<lang>/<domain>.po` and litters po/ with timestamp
+# directories for a layout this project does not have. The two tools are
+# driven directly instead.
+#
+# locales come from po/LINGUAS rather than Dir["po/*.po"] so a language that
+# loses its file loses it loudly.
+begin
+  require "gettext/tools/msgfmt"
+  require "gettext/tools/xgettext"
+
+  GETTEXT_DOMAIN = "pdf-metadata-editor"
+
+  def gettext_locales
+    File.read("po/LINGUAS").split
+  end
+
+  def gettext_sources
+    Dir.glob("lib/**/*.rb") + Dir.glob("exe/*")
+  end
+
+  namespace :gettext do
+    namespace :mo do
+      desc "Compile po/*.po into locale/<lang>/LC_MESSAGES/#{GETTEXT_DOMAIN}.mo"
+      task :update do
+        gettext_locales.each do |locale|
+          target = File.join(
+            "locale",
+            locale,
+            "LC_MESSAGES",
+            "#{GETTEXT_DOMAIN}.mo",
+          )
+          mkdir_p(File.dirname(target))
+          GetText::Tools::MsgFmt.run("po/#{locale}.po", "-o", target)
+        end
+      end
+    end
+
+    desc "Extract the port's own messages into po/#{GETTEXT_DOMAIN}.port.pot"
+    task :pot do
+      # Written beside upstream's .pot rather than over it: upstream's is the
+      # record of what translators were given, and this one is the check that
+      # every key the port shows still reaches a catalogue.
+      GetText::Tools::XGetText.run(
+        *gettext_sources,
+        "-o",
+        "po/#{GETTEXT_DOMAIN}.port.pot",
+        "--package-name=#{GETTEXT_DOMAIN}",
+        "--add-comments=TRANSLATORS",
+      )
+    end
+  end
+
+  desc "Compile every message catalogue"
+  task gettext: "gettext:mo:update"
+rescue LoadError
+  desc("(stub) gettext:mo:update is unavailable")
+  task("gettext:mo:update") do
+    warn("NOTE: the gettext gem isn't installed in the current environment")
+  end
+end

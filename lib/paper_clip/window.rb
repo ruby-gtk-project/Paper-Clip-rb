@@ -6,9 +6,11 @@ require_relative 'document'
 require_relative 'document_manager'
 require_relative 'document_view'
 require_relative 'drop_overlay'
+require_relative 'password_dialog'
 require_relative 'primary_menu'
 require_relative 'save_changes_dialog'
 require_relative 'shortcuts_dialog'
+require_relative 'translations'
 require_relative 'window_state'
 
 module PaperClip
@@ -26,30 +28,30 @@ module PaperClip
   #   makes them vanish from the primary menu;
   # * the Ctrl+O, Ctrl+W and F10 shortcuts from the window's
   #   GtkShortcutController;
-  # * the toast shown when a document will not open.
+  # * the one toast upstream shows, which is the one an incorrect password
+  #   earns (src/window.vala:175). Every other failure goes to stderr, as
+  #   upstream's `critical` calls do, rather than inventing a string no
+  #   catalogue has.
   #
   # The state machine is upstream's and is the reason the window is not just a
   # pile of handlers: an unsaved document interrupts whatever was asked for.
   # Opening a file, or dropping one, or closing the window first raises the
   # save-changes dialog, and the state records what to resume afterwards.
   #
-  # Upstream's progress bar is driven by Adw.TimedAnimation. This port drives
-  # it from GLib::Timeout instead, which needs no animation target and makes
-  # the pulse and the fade the same mechanism.
+  # An encrypted document goes through PasswordDialog and is re-opened with
+  # the password, which is what upstream's create_document does
+  # (src/window.vala:183-199).
   class Window
-    TITLE = 'Paper Clip'
+    include Translations
+
+    # Upstream marks the window title in window.ui; it is translated at use
+    # rather than at definition so the locale is already set.
+    TITLE = N_('Paper Clip')
     APP_ICON = 'io.github.diegoivan.pdf_metadata_editor'
     PDF_MIME = 'application/pdf'
 
-    WELCOME_TITLE = 'Open a Document'
-    WELCOME_SUBTITLE = 'Drag and drop a PDF file here'
-
     EMPTY_PAGE = 'empty'
     EDITOR_PAGE = 'editor'
-
-    ENCRYPTED_TOAST = 'Failed to open the document. It is encrypted.'
-    FAILED_TOAST = 'Failed to open the document.'
-    NOT_PDF_TOAST = 'That file is not a PDF.'
 
     # The actions only a loaded document can service, which start disabled.
     DOCUMENT_ACTIONS = ['save', 'save-as', 'open-with'].freeze
@@ -61,9 +63,9 @@ module PaperClip
       'F10'        => 'win.main-menu',
     }.freeze
 
-    PULSE_INTERVAL = 100
-    FADE_INTERVAL = 20
-    FADE_STEPS = 10
+    # Upstream's two animations are both 200 ms of EASE_IN_OUT_SINE
+    # (src/window.vala:254 and :286).
+    ANIMATION_DURATION = 200
 
     attr_reader :document_manager
 
@@ -72,7 +74,6 @@ module PaperClip
       @document_manager = DocumentManager.new
       @state = WindowState::NONE
       @dropped_file = nil
-      @pulse = nil
     end
 
     def build
@@ -142,9 +143,13 @@ module PaperClip
     # default titlebar, which would sit above the Adwaita header bar and give
     # the window a second close button. It also keeps Adwaita dialogs inside
     # the window rather than spawning a second toplevel.
+    #
+    # The title is the application name only until a document is loaded;
+    # DocumentView then tracks document.title onto it, which is upstream's
+    # bind_property at src/DocumentView.vala:63.
     def window
       @window ||= Adwaita::ApplicationWindow.new(@app).tap do |win|
-        win.title = TITLE
+        win.title = _(TITLE)
         win.set_default_size(600, 500)
         win.set_size_request(350, 320)
       end
@@ -157,7 +162,7 @@ module PaperClip
     def open_button
       @open_button ||= Gtk::Button.new.tap do |button|
         button.action_name = 'win.open'
-        button.tooltip_text = 'Select a File'
+        button.tooltip_text = _('Select a File')
         button.child = open_button_content
       end
     end
@@ -165,7 +170,7 @@ module PaperClip
     def open_button_content
       @open_button_content ||= Adwaita::ButtonContent.new.tap do |content|
         content.icon_name = 'document-open-symbolic'
-        content.label = 'Open'
+        content.label = _('Open')
       end
     end
 
@@ -207,19 +212,23 @@ module PaperClip
       @welcome_box ||= Gtk::Box.new(:vertical, 15).tap { |box| box.valign = :center }
     end
 
+    # accessible-role presentation, as window.ui:79 sets: the icon repeats
+    # the heading below it, so a screen reader that announced it would read
+    # the welcome page twice.
     def welcome_icon
       @welcome_icon ||= Gtk::Image.new(icon_name: APP_ICON).tap do |image|
         image.pixel_size = 128
         image.margin_bottom = 12
+        image.accessible_role = :presentation
         image.add_css_class('icon-dropshadow')
       end
     end
 
     def welcome_title
-      @welcome_title ||= Gtk::Label.new(WELCOME_TITLE).tap { |label| label.add_css_class('title-1') }
+      @welcome_title ||= Gtk::Label.new(_('Open a Document')).tap { |label| label.add_css_class('title-1') }
     end
 
-    def welcome_subtitle = @welcome_subtitle ||= Gtk::Label.new(WELCOME_SUBTITLE)
+    def welcome_subtitle = @welcome_subtitle ||= Gtk::Label.new(_('Drag and drop a PDF file here'))
 
     # --- Controllers and actions --------------------------------------------
 
@@ -302,16 +311,17 @@ module PaperClip
         @file_dialog = file_dialog
         @file_dialog.open(window, nil) do |dialog, result|
           load_document(dialog.open_finish(result))
-        rescue GLib::Error
+        rescue GLib::Error => e
+          warn(e.message)
           @state = WindowState::NONE
         end
       end
 
+      # No title: upstream sets none (src/window.vala:137), and a title here
+      # would be a user-visible string in a place the original does not have
+      # one.
       def file_dialog
-        Gtk::FileDialog.new.tap do |dialog|
-          dialog.title = 'Open a Document'
-          dialog.filters = pdf_filters
-        end
+        Gtk::FileDialog.new.tap { |dialog| dialog.filters = pdf_filters }
       end
 
       def save_dialog(document)
@@ -333,7 +343,8 @@ module PaperClip
       end
 
       # Upstream checks the content type before accepting a drop, so dragging
-      # a text file onto the window is refused rather than failing later.
+      # a text file onto the window is refused rather than failing later. The
+      # refusal is a log line and no UI, as src/window.vala:92 is.
       def on_file_dropped(file)
         if pdf?(file)
           @dropped_file = file
@@ -341,14 +352,15 @@ module PaperClip
           open_dropped_file
           true
         else
-          add_toast(NOT_PDF_TOAST)
+          warn('File is not a PDF')
           false
         end
       end
 
       def pdf?(file)
         file.query_info('standard::*', :nofollow_symlinks).content_type == PDF_MIME
-      rescue GLib::Error
+      rescue GLib::Error => e
+        warn(e.message)
         false
       end
 
@@ -365,12 +377,16 @@ module PaperClip
         @dropped_file = nil
       end
 
-      def load_document(file)
+      # `password` is nil on the first attempt, which is the one that finds
+      # out whether the file needs one at all.
+      def load_document(file, password = nil)
+        @pending_file = file
         pulse_progress_bar
         Document.open(
           file,
+          password: password,
           on_done:  ->(document) { document_loaded(document) },
-          on_error: ->(error) { document_failed(error) },
+          on_error: ->(error) { document_failed(error, password) },
         )
       end
 
@@ -383,17 +399,38 @@ module PaperClip
         @state = WindowState::NONE
       end
 
-      # The error state: upstream's toast, shown when Poppler refuses the
-      # file. The two cases it can refuse for are kept apart, because
-      # "encrypted" is the one the user can do something about.
-      def document_failed(error)
-        if error.is_a?(Document::EncryptedError)
-          add_toast(ENCRYPTED_TOAST)
-        else
-          add_toast(FAILED_TOAST)
-        end
+      # Upstream's create_document asks for a password when Poppler reports
+      # the file encrypted and it has none to try, and shows the toast when
+      # the password it was given turns out to be wrong
+      # (src/window.vala:174-199).
+      def document_failed(error, password)
         hide_progress_bar
+        if error.is_a?(Document::EncryptedError) && password.nil?
+          ask_for_password
+        else
+          report_failure(error, password)
+        end
+      end
+
+      def report_failure(error, password)
+        warn(error.message)
+        if error.is_a?(Document::EncryptedError)
+          add_toast(_('Failed to open the document. The provided password is incorrect.'))
+        end
         @state = WindowState::NONE
+      end
+
+      def ask_for_password
+        PasswordDialog.new.tap do |dialog|
+          @password_dialog = dialog
+          dialog.build
+          dialog.ask(
+            @pending_file,
+            window,
+            on_password: ->(password) { load_document(@pending_file, password) },
+            on_cancel:   -> { @state = WindowState::NONE },
+          )
+        end
       end
 
       def add_toast(message)
@@ -412,9 +449,9 @@ module PaperClip
         @state = WindowState::NONE
       end
 
-      def save_failed(_error)
+      def save_failed(error)
         hide_progress_bar
-        add_toast('Failed to save the document.')
+        warn(error.message)
         @state = WindowState::NONE
       end
 
@@ -436,12 +473,37 @@ module PaperClip
         end
       end
 
+      # The managers the dialog returned, not this window's own: the dialog
+      # answers with exactly what was ticked, and upstream saves exactly
+      # those (src/application.vala:168-174). Unticking every row therefore
+      # means "save nothing and carry on", which is what the checkbox looks
+      # like it means.
       def save_selected(managers)
         if managers.empty?
           proceed_with_state
         else
-          save_to(@document_manager.document.path)
+          save_managers(managers)
         end
+      end
+
+      def save_managers(managers)
+        file_save_animation
+        @pending_saves = managers.length
+        managers.each do |manager|
+          manager.save(nil, on_done: method(:one_saved), on_error: method(:one_save_failed))
+        end
+      end
+
+      def one_saved(*)
+        @pending_saves -= 1
+        if @pending_saves <= 0
+          saved
+        end
+      end
+
+      def one_save_failed(error)
+        warn(error.message)
+        one_saved
       end
 
       def proceed_with_state
@@ -468,56 +530,48 @@ module PaperClip
 
       # --- The progress bar -------------------------------------------------
 
+      # One pulse per load, as upstream's pulse_progress_bar is
+      # (src/window.vala:283): the bar is an indeterminate hint that work
+      # started, not a repeating animation.
       def pulse_progress_bar
         progress_bar.opacity = 1
         progress_bar.pulse
-        @pulse ||= GLib::Timeout.add(PULSE_INTERVAL) do
-          progress_bar.pulse
-          true
-        end
-      end
-
-      def stop_pulse
-        if @pulse
-          GLib::Source.remove(@pulse)
-          @pulse = nil
-        end
       end
 
       def hide_progress_bar
-        stop_pulse
-        progress_bar.opacity.then { |from| fade_out(from) }
+        animate(
+          progress_bar,
+          'opacity',
+          1,
+          0,
+        ).play
       end
 
-      def fade_out(from)
-        step = 0
-        GLib::Timeout.add(FADE_INTERVAL) do
-          step += 1
-          progress_bar.opacity = from * (1.0 - (step.to_f / FADE_STEPS))
-          step < FADE_STEPS
-        end
-      end
-
-      # The save indicator: a determinate sweep to full, then the same fade.
+      # The save indicator: fraction 0 to 1 over the same 200 ms, and the
+      # fade when it is done, which is what upstream's `animation.done`
+      # connection does (src/window.vala:257).
       def file_save_animation
-        stop_pulse
-        progress_bar.opacity = 1
         progress_bar.fraction = 0
-        step = 0
-        GLib::Timeout.add(FADE_INTERVAL) do
-          step += 1
-          progress_bar.fraction = step.to_f / FADE_STEPS
-          sweep_step(step)
+        progress_bar.opacity = 1
+        animate(
+          progress_bar,
+          'fraction',
+          0,
+          1,
+        ).tap do |animation|
+          animation.signal_connect('done') { hide_progress_bar }
+          animation.play
         end
       end
 
-      def sweep_step(step)
-        if step < FADE_STEPS
-          true
-        else
-          hide_progress_bar
-          false
-        end
+      def animate(widget, property, from, to)
+        Adwaita::TimedAnimation.new(
+          widget,
+          from,
+          to,
+          ANIMATION_DURATION,
+          Adwaita::PropertyAnimationTarget.new(widget, property),
+        ).tap { |animation| animation.easing = Adwaita::Easing::EASE_IN_OUT_SINE }
       end
   end
 end

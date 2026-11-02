@@ -2,6 +2,8 @@
 
 require 'adwaita'
 
+require_relative 'translations'
+
 module PaperClip
   # PrimaryMenu is the menu behind the hamburger button in the header bar.
   #
@@ -13,17 +15,23 @@ module PaperClip
   # Save, Save As and Open With are absent from the menu until a document is
   # open rather than sitting there greyed out. The window enables the three
   # actions once a document loads.
+  #
+  # The leading underscores are Alt-key mnemonics and they are inside the
+  # translatable string, because a translator picks a mnemonic that works in
+  # their language. Marked at definition, translated when the menu is built.
   module PrimaryMenu
+    include Translations
+
     SECTIONS = [
-      [['_New Window', 'app.new-window', nil]],
+      [[N_('_New Window'), 'app.new-window', nil]],
       [
-        ['_Save', 'win.save', '<control>s'],
-        ['Save _As…', 'win.save-as', '<control><shift>s'],
-        ['Open _With…', 'win.open-with', nil],
+        [N_('_Save'), 'win.save', '<control>s'],
+        [N_('Save _As…'), 'win.save-as', '<control><shift>s'],
+        [N_('Open _With…'), 'win.open-with', nil],
       ],
       [
-        ['_Keyboard Shortcuts', 'app.shortcuts', nil],
-        ['_About Paper Clip', 'app.about', nil],
+        [N_('_Keyboard Shortcuts'), 'app.shortcuts', nil],
+        [N_('_About Paper Clip'), 'app.about', nil],
       ],
     ].freeze
 
@@ -42,7 +50,7 @@ module PaperClip
     end
 
     def self.item(label, action, accel)
-      Gio::MenuItem.new(label, action).tap do |entry|
+      Gio::MenuItem.new(_(label), action).tap do |entry|
         if accel
           entry.set_attribute_value('accel', GLib::Variant.new(accel))
         end

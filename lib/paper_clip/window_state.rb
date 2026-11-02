@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'adwaita'
+require 'glib2'
 
 module PaperClip
   # WindowState is what the window is in the middle of doing.

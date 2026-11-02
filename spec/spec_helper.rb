@@ -16,12 +16,23 @@ begin
   end
 rescue LoadError => error
   # check the error message and re-raise when unexpected
-  raise error unless error.message.include?("kettle")
+  unless error.message.include?("kettle")
+    raise error
+  end
 end
 
 # External RSpec & related config
-require "kettle/test/rspec"
-# `kettle/test/rspec` installs harness helpers documented in spec/README.md.
+begin
+  require "kettle/test/rspec"
+  # `kettle/test/rspec` installs harness helpers documented in spec/README.md.
+rescue LoadError => error
+  # The harness helpers are optional in environments that package the gems
+  # themselves — the Nix devShell carries rspec and not the kettle stack — and
+  # nothing in spec/ depends on them. Re-raise anything else.
+  unless error.message.include?("kettle")
+    raise error
+  end
+end
 
 # This library
 require "paper/clip/rb"

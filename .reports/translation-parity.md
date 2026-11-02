@@ -1,5 +1,14 @@
 # Translation parity — Paper Clip
 
+> **Round 2 note.** This document is the round-1 audit and is kept as the
+> record of what the port looked like then: 96 upstream keys, 0 in the port.
+> Round 2 closed all 96. The maintained count, the census commands and the
+> extraction check now live in the Translation section of
+> `COMPONENT_PARITY.md` at the branch root, and the two upstream `POTFILES`
+> problems this audit found are in `FINDINGS.md` §5. Every row below that
+> says "gap" has been closed; none of them was closed by rewording an
+> upstream msgid.
+
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |

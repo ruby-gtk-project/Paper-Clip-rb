@@ -3,6 +3,7 @@
 require 'adwaita'
 
 require_relative 'document_row'
+require_relative 'translations'
 
 module PaperClip
   # SaveChangesDialog asks what to do about documents with unsaved changes.
@@ -21,9 +22,17 @@ module PaperClip
   # callback — which is also why the window keeps the dialog in an instance
   # variable: nothing else would hold it while it is on screen.
   class SaveChangesDialog
-    HEADING = 'Save Changes?'
-    BODY = 'Open documents contain unsaved changes. Changes which are not saved will be ' \
-           'permanently lost.'
+    include Translations
+
+    HEADING = N_('Save Changes?')
+    # Adjacent literals, joined by the parser. rxgettext joins them too, so
+    # upstream's longest msgid survives extraction — but a `+` or an
+    # interpolation here would not, and the runtime lookup would go on looking
+    # correct while the key never reached the catalogue.
+    BODY = N_(
+      'Open documents contain unsaved changes. Changes which are not saved will be ' \
+      'permanently lost.',
+    )
 
     CANCEL = :cancel
     DISCARD = :discard
@@ -54,10 +63,10 @@ module PaperClip
     def selected_managers = rows.select(&:selected?).map(&:manager)
 
     def dialog
-      @dialog ||= Adwaita::AlertDialog.new(HEADING, BODY).tap do |d|
-        d.add_response(CANCEL.to_s, '_Cancel')
-        d.add_response(DISCARD.to_s, '_Discard')
-        d.add_response(SAVE.to_s, '_Save')
+      @dialog ||= Adwaita::AlertDialog.new(_(HEADING), _(BODY)).tap do |d|
+        d.add_response(CANCEL.to_s, _('_Cancel'))
+        d.add_response(DISCARD.to_s, _('_Discard'))
+        d.add_response(SAVE.to_s, _('_Save'))
         d.set_response_appearance(DISCARD.to_s, Adwaita::ResponseAppearance::DESTRUCTIVE)
         d.set_response_appearance(SAVE.to_s, Adwaita::ResponseAppearance::SUGGESTED)
         d.default_response = SAVE.to_s

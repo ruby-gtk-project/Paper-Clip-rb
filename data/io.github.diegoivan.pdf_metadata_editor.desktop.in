@@ -1,0 +1,21 @@
+# Ported from upstream's data/io.github.diegoivan.pdf_metadata_editor.desktop.in.
+# Name, Comment, Keywords and the action Name are the translated keys; the
+# values are upstream's byte for byte, because eighteen catalogues are keyed
+# on them. Exec is the port's launcher, which is what the gemspec installs.
+[Desktop Entry]
+Name=Paper Clip
+Comment=Edit PDF document metadata
+Exec=paper-clip %U
+Icon=io.github.diegoivan.pdf_metadata_editor
+DBusActivatable=true
+Terminal=false
+Type=Application
+Keywords=PDF;Metadata;Editor;
+Categories=GTK;Utility;Office;
+MimeType=application/pdf;
+StartupNotify=true
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=paper-clip --new-window

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'adwaita'
+require 'glib2'
 
 module PaperClip
   # ThreadManager runs expensive work off the main loop.
@@ -14,6 +14,10 @@ module PaperClip
   #
   # Delivering through GLib::Idle matters: the callbacks touch widgets, and
   # GTK may only be touched from the thread running the main loop.
+  #
+  # glib2 and not adwaita: GLib::Idle is all this needs, and requiring the
+  # widget toolkit here would make Document unloadable on a machine with no
+  # display — which is where the spec suite runs.
   module ThreadManager
     QUEUE = Queue.new
     LOCK = Mutex.new

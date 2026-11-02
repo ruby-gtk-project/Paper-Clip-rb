@@ -3,6 +3,7 @@
 require 'adwaita'
 
 require_relative 'string_array_row'
+require_relative 'translations'
 
 module PaperClip
   # DetailsList is the read-only half of the editor: the PDF properties that
@@ -12,22 +13,26 @@ module PaperClip
   # a boxed list of seven property rows plus the two expandable string-array
   # rows, in upstream's order.
   #
-  # One deliberate difference: upstream hides the page-count row when the
-  # count is zero. Here every row is always shown, because a row that
-  # disappears reads as a bug rather than as "this document has no pages".
+  # The page-count row is hidden when the count is zero, as upstream's
+  # document setter does (src/DetailsList.vala:61-66). A PDF whose page tree
+  # this port cannot follow therefore says nothing about how many pages it
+  # has, rather than claiming it has none.
   class DetailsList
+    include Translations
+
+    # Marked at definition, translated when the rows are built.
     TITLES = {
-      format:      'Format',
-      layout:      'Layout',
-      duplex:      'Duplex',
-      subtype:     'Subtype',
-      javascript:  'Contains JavaScript',
-      attachments: 'Contains Attachments',
-      pages:       'Number of Pages',
+      format:      N_('Format'),
+      layout:      N_('Layout'),
+      duplex:      N_('Duplex'),
+      subtype:     N_('Subtype'),
+      javascript:  N_('Contains JavaScript'),
+      attachments: N_('Contains Attachments'),
+      pages:       N_('Number of Pages'),
     }.freeze
 
-    YES = 'Yes'
-    NO = 'No'
+    YES = N_('Yes')
+    NO = N_('No')
 
     def build
       list_box.tap do |box|
@@ -44,7 +49,7 @@ module PaperClip
       action_rows[:subtype].subtitle = document.subtype
       action_rows[:javascript].subtitle = yes_no(document.contains_javascript?)
       action_rows[:attachments].subtitle = yes_no(document.contains_attachments?)
-      action_rows[:pages].subtitle = document.n_pages.to_s
+      show_page_count(document.n_pages)
       preferences_row.strings = document.viewer_preferences
       permissions_row.strings = document.permissions
     end
@@ -60,11 +65,11 @@ module PaperClip
     # One memoized hash rather than seven near-identical methods: the rows
     # differ only by their title, and the titles are the table above.
     def action_rows
-      @action_rows ||= TITLES.transform_values { |title| action_row(title) }
+      @action_rows ||= TITLES.transform_values { |title| action_row(_(title)) }
     end
 
-    def preferences_row = @preferences_row ||= StringArrayRow.new('Viewer Preferences')
-    def permissions_row = @permissions_row ||= StringArrayRow.new('Permissions')
+    def preferences_row = @preferences_row ||= StringArrayRow.new(_('Viewer Preferences'))
+    def permissions_row = @permissions_row ||= StringArrayRow.new(_('Permissions'))
 
     private
 
@@ -76,11 +81,22 @@ module PaperClip
         end
       end
 
+      # The subtitle is only set when there is a count to show, so a hidden
+      # row never carries a stale "0" to be revealed by a later document.
+      def show_page_count(count)
+        action_rows[:pages].tap do |row|
+          row.visible = count.positive?
+          if row.visible?
+            row.subtitle = count.to_s
+          end
+        end
+      end
+
       def yes_no(flag)
         if flag
-          YES
+          _(YES)
         else
-          NO
+          _(NO)
         end
       end
   end

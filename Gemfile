@@ -66,3 +66,8 @@ group :development do
   gem "rubocop"
 end
 gem "adwaita"
+
+# The app's own message catalogue. Pure Ruby: it parses .mo files itself and
+# needs no C gettext tooling at runtime. The domain is upstream's,
+# pdf-metadata-editor, so po/ carries over unchanged.
+gem "gettext"
