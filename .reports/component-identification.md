@@ -1,258 +1,152 @@
-# Component identification — Paper-Clip-rb, the `ruby` branch
+# Component identification — Paper Clip
 
 | | |
 |---|---|
-| Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` @ `6d05c88af0f4ad6db5fbd16c88b1d4d9a93d632c` |
-| Scope | the whole app, unit by unit |
+| Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
+| Port | `ruby` branch, this audit |
+| Upstream units (template roots / widget-owning classes) | **13** |
+| Port units | **12** |
+| Units with no port counterpart | **2** (`DocumentThumbnail`, `Services/Thumbnailer`) |
 
-`.reports/component-inventory.md` is the **upstream** inventory and still holds.
-This document is the other half: the inventory of what the `ruby` branch
-actually builds, so `component-parity` has the same TSV shape from both sides.
+The unit is the file, as the skill defines it: one upstream source file (plus the
+`.ui` template it owns) against one `lib/paper_clip/*.rb`.
 
-Scans (`component-identification/scripts/component-scan.sh`):
+## Upstream inventory
 
-| | Upstream rows | Port rows |
-|---|---:|---:|
-| total rows | 158 | 108 |
-| distinct widget types | 40 | 32 |
-| distinct CSS classes | 14 | 8 |
-| distinct signals | 12 | 12 |
-| distinct actions (literal) | 6 | 1 |
-| distinct controllers | 2 | 2 |
+### `src/window.ui` + `src/window.vala` — the application window
+- `AdwApplicationWindow` 600×500, min 350×320, title `Paper Clip`, `close-request` → `on_close_request`
+- `AdwToolbarView` → top: `GtkBox(vertical)` holding `AdwHeaderBar#header_bar` and `GtkProgressBar#progress_bar` (`.osd`, opacity 0)
+- header start: `GtkButton` action `win.open`, tooltip *Select a File*, child `AdwButtonContent` icon `document-open-symbolic` label *Open*
+- header end: `GtkMenuButton#menu_button` icon `open-menu-symbolic`, menu `primary_menu`
+- content: `AdwToastOverlay#toast_overlay` → `PaperClipDropOverlay#drop_overlay` (overlayed `AdwBin#overlay_bin`) → `GtkStack#view_stack` (crossfade)
+  - page `empty`: `AdwClamp#welcome_clamp` → `GtkBox#welcome_status` (vertical, 15, valign center) → `GtkImage` (`icon-dropshadow`, pixel-size 128, margin-bottom 12, accessible-role presentation), `GtkLabel` *Open a Document* (`.title-1`), `GtkLabel` *Drag and drop a PDF file here*
+  - page `editor`: `PaperClipDocumentView#doc_view`
+- `GtkShortcutController`: `<Control>o`→`win.open`, `<Control>w`→`window.close`, `F10`→`win.main-menu`
+- actions installed on `win`: `open`, `open-with`, `save`, `save-as`, `main-menu`; `save`/`save-as`/`open-with` start disabled
+- controller: `GtkDropTarget(File, COPY)` on `view_stack`, `drop` → `on_file_dropped`
+- `menu primary_menu`, three sections: *_New Window* `app.new-window`; *_Save* `win.save` `<control>s` hidden-when action-disabled, *Save _As…* `win.save-as` `<control><shift>s` hidden-when action-disabled, *Open _With…* `win.open-with` hidden-when action-disabled; *_Keyboard Shortcuts* `app.shortcuts`, *_About Paper Clip* `app.about`
+- error state: one `AdwToast` — *Failed to open the document. The provided password is incorrect.*
 
-The action stream is the least trustworthy, exactly as the skill warns: the
-port installs its app-level and window-level actions from `ACTIONS` tables in
-loops (`lib/paper_clip/application.rb:34`, `lib/paper_clip/window.rb:57`) and
-its keyword action from constants (`lib/paper_clip/keyword_list.rb:27`), so
-`app.about`, `app.shortcuts`, `app.query-quit`, `app.new-window`, `win.save`,
-`win.save-as`, `win.open-with`, `win.main-menu` and
-`keyword-list.add-keyword` are all installed and none of them appear in the
-scan. Read the install sites, not the stream.
+### `src/application.vala` — `Adw.Application`
+- app id `io.github.diegoivan.pdf_metadata_editor`, flags `HANDLES_OPEN`
+- actions `about`, `shortcuts`, `query-quit`, `new-window`; accels `<Ctrl>question`, `<Ctrl>q`, `<Ctrl>n`
+- main options `--new-window`/`-w` (*Open a new window*), `--version`/`-v` (*Print version information and exit*)
+- `open()` — one window per PDF, non-PDFs logged and skipped
+- `AdwAboutDialog` with icon, name, copyright, developer, developers, artists, issue url, GPL-3.0, `translator_credits`, version, website, `debug_info`
+- `startup`/`shutdown` — `Xmp.init` / `Xmp.terminate`
+- `query-quit` — collects every dirty `DocumentManager`, one `SaveChangesDialog`, saves the ticked ones
 
-The same holds for two CSS classes: `long-filename` and `overlay-drag-area`
-reach widgets through `DocumentView::LONG_FILENAME_CLASS`
-(`lib/paper_clip/document_view.rb:43`) and `DropOverlay::DRAG_CLASS`
-(`lib/paper_clip/drop_overlay.rb:19`), so the scan reports them absent and
-they are present.
+### `src/DocumentView.vala` + `src/gtk/document-view.ui` — the editor page
+- `AdwBin` → `GtkScrolledWindow#scrolled_window` (propagate natural h/w) → `AdwClamp#content_clamp` (`.document-view-drop`) → `GtkBox(vertical,18, margins 12/24/12)`
+- children in order: **`PaperClipDocumentThumbnail#document_thumbnail` (margin-top 12)**, `GtkLabel#title_label` (`.title-1`, wrap, justify center, hexpand), `AdwPreferencesGroup#properties_group`, `PaperClipKeywordList#keyword_list`, `AdwPreferencesGroup#details_group` (*Non-Editable Properties*) → `PaperClipDetailsList#details_list`
+- `properties_group`: `AdwEntryRow` × 5 — *Title*, *Author*, *Creation Software*, *Subject*, *Conversion Software* — then `PaperClipDateRow` × 2 — *Creation Date*, *Modification Date*
+- `GtkShortcutController`: `<Control>s`→`win.save`, `<Control><Shift>s`→`win.save-as`
+- `BindingGroup` of 8 bidirectional/sync-create bindings + `document.title`→`root.title`
+- `insert_action_group("editor", SimpleActionGroup)` — empty namespace
+- `Gtk.FileLauncher(always_ask=true)` for *Open With*
+- `.long-filename` applied above 45 chars with a space; `ellipsize=END` above 21 chars without one
 
-## File map, upstream → port
+### `src/DocumentThumbnail.vala` — page-one preview
+- `Adw.Bin` → `GtkImage` with `.icon-dropshadow`, `pixel_size = 175`
+- `MAX_SIZE = 350`; `Gtk.Snapshot` white `append_color` rectangle under `append_scaled_texture`, filter `NEAREST` when upscaling else `TRILINEAR`; `compute_scaled_size` from AdwAvatar
+- destructor clears the image
 
-| Upstream | Port |
+### `src/Services/Thumbnailer.vala` — off-thread renderer
+- singleton; `create_thumbnail(page, basename)` renders a Cairo ARGB32 surface on `ThreadManager`
+- over `max_size² × area_threshold`: writes PNG to `$TMPDIR/thumbnails/<basename>.png`, reloads via `Gdk::Pixbuf.from_file_at_size` at the first 0.1-step scale that clears the budget
+- under it: `Gdk.MemoryTexture` from a sized copy, endian-chosen `MemoryFormat`
+- `errordomain ThumbnailError { FAILED_EXPORT, FAILED_TO_CACHE }`
+
+### `src/DetailsList.vala` + `src/gtk/details-list.ui`
+- `AdwBin` → `GtkListBox` (`.boxed-list`, valign start)
+- `AdwActionRow` × 7, each `selectable=false` + `.property`: *Format*, *Layout*, *Duplex*, *Subtype*, *Contains JavaScript*, *Contains Attachments*, *Number of Pages*
+- `PaperClipStringArrayRow` × 2: *Viewer Preferences*, *Permissions*
+- *Yes* / *No* for the two booleans; pages row hidden when `n_pages == 0`
+
+### `src/StringArrayRow.vala`
+- `Adw.ExpanderRow` + inner `ContentRow : Gtk.ListBoxRow` → `GtkLabel` (`.dim-label`, halign START, margin-start 12, margin-top 18); contents are `"• %s\n"` per entry
+
+### `src/DateRow.vala` + `src/gtk/date-row.ui`
+- `Adw.ActionRow`; suffix `GtkButton` icon `entry-clear-symbolic` (`.flat`, tooltip *Remove Date*) → `on_clear_button_clicked`
+- suffix `GtkMenuButton` (`.flat`, tooltip *Show Calendar*) → `GtkPopover#calendar_popover` → `GtkBox(vertical,6)` → `GtkCalendar#calendar` (`day-selected`) + `GtkBox(.linked, homogeneous)` with *Today* / *Tomorrow* buttons
+- subtitle is `date.format("%x")` or *No date set*
+
+### `src/KeywordList.vala` + `src/gtk/keyword-list.ui`
+- `Adw.PreferencesGroup` titled *Keywords*
+- header-suffix `GtkButton#add_button` icon `list-add-symbolic` (`.flat`, tooltip *Add a keyword*), action `keyword-list.add-keyword`, `visible` bound to `is-empty` inverted
+- `GtkListBox#listbox` (`.boxed-list`), `row-activated` → `on_row_activated`
+- `GtkShortcutController`: `<Control>Return` → `keyword-list.add-keyword`
+- action group `keyword-list` with `add-keyword`
+- **empty state**: `AdwPreferencesRow` (activatable, not selectable) → `GtkCenterBox` with `GtkImage` `list-add-symbolic` (halign END, hexpand, margin-end 12) and `GtkLabel` *Add Keyword* (justify center, wrap, margins 12)
+- focus rules: last row grabs focus on every change; first row when the list becomes one row long
+
+### `src/KeywordRow.vala`
+- `Adw.EntryRow`, `focusable`, title *Keyword*, prefix `GtkButton` icon `cross-symbolic` (`.flat`, tooltip *Delete Keyword*)
+
+### `src/DropOverlay.vala`
+- `Adw.Bin` → `GtkOverlay` + overlaid `GtkRevealer` (`can_target=false`, `visible=false`, CROSSFADE)
+- watches `notify::current-drop`; adds/removes `.overlay-drag-area` on the overlaid widget
+
+### `src/PasswordDialog.vala` + `src/gtk/password-dialog.ui`
+- `Adw.Dialog` 350×320, title *Password Dialog*, `closed` → `on_closed`
+- `AdwToolbarView` → `AdwHeaderBar` (`show-title=false`) → `AdwStatusPage#status_page` (`.compact`, icon `key-symbolic`, title *This Document Is Encrypted*, description = basename)
+- `AdwClamp` → `GtkBox(vertical,12)` → `GtkListBox` (`.boxed-list`, selection none) → `AdwPasswordEntryRow#password_entry` (*Password*); `GtkButton#decrypt_button` *Decrypt* (`.pill .suggested-action`, action `dialog.success`)
+- `GtkShortcutController` **capture phase**: `Return`→`dialog.success`, `Escape`→`dialog.cancel`
+- action group `dialog` with `success`, `cancel`; `errordomain PasswordDialogError { CANCELLED }`
+
+### `src/SaveChangesDialog.vala` + `src/gtk/save-changes-dialog.ui`
+- `Adw.MessageDialog`, heading *Save Changes?*, body *Open documents contain unsaved changes…*, default `save`, close `cancel`
+- responses `_Cancel`, `_Discard` (destructive), `_Save` (suggested)
+- `GtkScrolledWindow` → `GtkListBox#documents_listbox` (`.boxed-list`, selection none)
+- `DocumentRow : Adw.ActionRow` with prefix `GtkCheckButton` (valign center) bound to `selected`, title = `document.title`, subtitle = basename, checked by default
+- `enum SaveChangesResponse { CANCEL, DISCARD, SAVE }`
+
+### `src/gtk/shortcut-window.ui`
+- `GtkShortcutsWindow#shortcut_window`, modal, one `GtkShortcutsSection` (`max-height=10`), two groups, all strings `context="shortcut window"`
+- *General*: *Quit* `<control>q`, *New window* `<control>n`, *Close window* `<control>w`, *Keyboard Shortcuts* `<control>question`
+- *Editor*: *Open* `<control>o`, *Save* `<control>s`, *Save As…* `<control><shift>s`, *Add a keyword* `<control>Return`
+
+### Non-widget units
+- `src/Document.vala` (+ `StringObject`, `XmpError`), `src/Services/DocumentManager.vala`, `src/ThreadManager.vala`, `src/Models/AsyncTask.vala`, `src/style.css` (3 rules: `.long-filename`, `stack:drop(active)`, `.overlay-drag-area`)
+- `data/*.desktop.in`, `data/*.metainfo.xml.in`, `data/*.gschema.xml` (empty schema), **`data/*.service.in`** (D-Bus activation), `data/nautilus-extension/paper-clip.py`
+- `data/meson.build` declares **three build-system tests**: `desktop-file-validate`, `appstreamcli validate`, `glib-compile-schemas --strict --dry-run`
+
+## Port inventory
+
+| Upstream unit | Port file |
 |---|---|
-| `src/main.vala` | `lib/paper_clip/main.rb` |
-| `src/application.vala` | `lib/paper_clip/application.rb` + `lib/paper_clip/about_dialog.rb` |
-| `src/window.vala` + `src/window.ui` | `lib/paper_clip/window.rb` + `lib/paper_clip/window_state.rb` + `lib/paper_clip/primary_menu.rb` |
-| `src/gtk/shortcut-window.ui` | `lib/paper_clip/shortcuts_dialog.rb` |
-| `src/DocumentView.vala` + `src/gtk/document-view.ui` | `lib/paper_clip/document_view.rb` |
-| `src/DateRow.vala` + `src/gtk/date-row.ui` | `lib/paper_clip/date_row.rb` |
-| `src/DetailsList.vala` + `src/gtk/details-list.ui` | `lib/paper_clip/details_list.rb` |
-| `src/StringArrayRow.vala` | `lib/paper_clip/string_array_row.rb` |
-| `src/KeywordList.vala` + `src/gtk/keyword-list.ui` | `lib/paper_clip/keyword_list.rb` |
+| `src/window.ui` + `src/window.vala` | `lib/paper_clip/window.rb` |
+| `menu primary_menu` (in `window.ui`) | `lib/paper_clip/primary_menu.rb` |
+| `src/application.vala` (app object) | `lib/paper_clip/application.rb` |
+| `src/application.vala` (`on_about_action`, `generate_debug_info`) | `lib/paper_clip/about_dialog.rb` |
+| `src/main.vala` + option table | `lib/paper_clip/main.rb` |
+| `src/DocumentView.vala` + `.ui` | `lib/paper_clip/document_view.rb` |
+| **`src/DocumentThumbnail.vala`** | **— none —** |
+| **`src/Services/Thumbnailer.vala`** | **— none —** |
+| `src/DetailsList.vala` + `.ui` | `lib/paper_clip/details_list.rb` |
+| `src/StringArrayRow.vala` (both classes) | `lib/paper_clip/string_array_row.rb` |
+| `src/DateRow.vala` + `.ui` | `lib/paper_clip/date_row.rb` |
+| `src/KeywordList.vala` + `.ui` | `lib/paper_clip/keyword_list.rb` |
 | `src/KeywordRow.vala` | `lib/paper_clip/keyword_row.rb` |
 | `src/DropOverlay.vala` | `lib/paper_clip/drop_overlay.rb` |
-| `src/SaveChangesDialog.vala` + `src/gtk/save-changes-dialog.ui` | `lib/paper_clip/save_changes_dialog.rb` + `lib/paper_clip/document_row.rb` |
-| `src/Document.vala` | `lib/paper_clip/document.rb` + `lib/paper_clip/pdf_strings.rb` |
+| `src/PasswordDialog.vala` + `.ui` | `lib/paper_clip/password_dialog.rb` |
+| `src/SaveChangesDialog.vala` + `.ui` | `lib/paper_clip/save_changes_dialog.rb` |
+| `PaperClip.DocumentRow` (same file) | `lib/paper_clip/document_row.rb` |
+| `src/gtk/shortcut-window.ui` | `lib/paper_clip/shortcuts_dialog.rb` |
+| `src/Document.vala` | `lib/paper_clip/document.rb` (+ `pdf_strings.rb`, `pdf_crypt.rb`, `xmp_packet.rb`) |
 | `src/Services/DocumentManager.vala` | `lib/paper_clip/document_manager.rb` |
 | `src/ThreadManager.vala` | `lib/paper_clip/thread_manager.rb` |
+| `src/Models/AsyncTask.vala` | *folded into the dialogs' callbacks* |
+| `WindowState` enum | `lib/paper_clip/window_state.rb` |
 | `src/style.css` | `lib/paper_clip/style.rb` |
-| **`src/PasswordDialog.vala` + `src/gtk/password-dialog.ui`** | **nothing** |
-| **`src/Models/AsyncTask.vala`** | **nothing** |
-| **`src/DocumentThumbnail.vala`** | **nothing** |
-| **`src/Services/Thumbnailer.vala`** | **nothing** |
-| **`data/io.github.diegoivan.pdf_metadata_editor.desktop.in`** | **nothing** |
-| **`data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in`** | **nothing** |
-| **`data/io.github.diegoivan.pdf_metadata_editor.gschema.xml`** | **nothing** |
-| **`data/io.github.diegoivan.pdf_metadata_editor.service.in`** | **nothing** |
-| **`data/icons/**`, `data/nautilus-extension/paper-clip.py`** | **nothing** |
-| **`src/gtk/*.svg` (5 bundled symbolic icons)** | **nothing** |
-| **`po/` (18 catalogues, `LINGUAS`, `POTFILES`, `.pot`)** | **nothing** |
+| `Intl.*` in `application.vala` | `lib/paper_clip/translations.rb` |
+| `data/*.desktop.in`, `*.metainfo.xml.in`, `*.gschema.xml`, `nautilus-extension/` | present under `data/` |
+| **`data/*.service.in`** | **— none —** |
+| icons from `pdf-metadata-editor.gresource.xml` | `data/icons/hicolor/scalable/actions/*.svg` (all five) |
 
-Six upstream files on the left of an arrow with nothing on the right is where
-the largest gaps live, and they are found here rather than in any diff.
+## Identification-level gaps
 
-## lib/paper_clip/application.rb — the application object
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| (none) | — | — | `startup`, `activate`, `open`, `destroy` on each window | `Gtk::Application` with `Adwaita.init` ahead of it |
-| (no widget) | — | — | `app.about`, `app.shortcuts`, `app.query-quit`, `app.new-window` | accels `<Control>question`, `<Control>q`, `<Control>n` — built in a loop from `ACTIONS:34` |
-
-Behaviour: `:handles_open` flag; `on_open` filters by content type and opens
-one window per PDF; `query-quit` collects `@windows`' managers, routes them
-through one `SaveChangesDialog`, and waits for every async save before
-`app.quit`.
-
-## lib/paper_clip/about_dialog.rb — the About dialog
-
-| Widget | × | CSS | Signals | Notes |
-|---|---:|---|---|---|
-| `Adw.AboutDialog` | 1 | — | — | icon, name, version `0.1.0`, copyright, developer name, developers (upstream + "The Ruby GTK Project"), artists, `comments`, website, issue URL (retargeted at the port's tracker), GPL-3.0, `debug_info` |
-
-No `translator_credits`. `debug_info` lists Gtk, Libadwaita and Ruby; not
-Poppler, Exempi or GdkPixbuf.
-
-## lib/paper_clip/window.rb — the main window
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Adw.ApplicationWindow` | 1 | — | `close-request` → `on_close_request` | 600×500 default, 350×320 minimum, title `Paper Clip` |
-| `Adw.ToolbarView` | 1 | — | — | |
-| `Gtk.Box` | 2 | — | — | `top_box` vertical; `welcome_box` vertical spacing 15, valign center |
-| `Adw.HeaderBar` | 1 | — | — | |
-| `Gtk.Button` | 1 | — | `win.open` | tooltip "Select a File" |
-| `Adw.ButtonContent` | 1 | — | — | `document-open-symbolic` + "Open" |
-| `Gtk.MenuButton` | 1 | — | menu-model `PrimaryMenu.build` | `open-menu-symbolic` |
-| `Gtk.ProgressBar` | 1 | `osd` | — | hexpand, opacity 0 |
-| `Adw.ToastOverlay` | 1 | — | — | |
-| `PaperClip::DropOverlay` | 1 | — | — | overlayed = `Adwaita::Bin`, child = stack |
-| `Gtk.Stack` | 1 | — | — | crossfade, `empty` + `editor` |
-| `Adw.Clamp` | 1 | — | — | `welcome_clamp` |
-| `Gtk.Image` | 1 | `icon-dropshadow` | — | app icon, pixel-size 128, margin-bottom 12. **No `accessible-role: presentation`** |
-| `Gtk.Label` | 2 | `title-1` (1st) | — | "Open a Document", "Drag and drop a PDF file here" |
-| `PaperClip::DocumentView` | 1 | — | — | |
-| `Gtk.ShortcutController` | 1 | — | — | controller |
-| `Gtk.Shortcut` | 3 | — | `win.open`, `window.close`, `win.main-menu` | `<Control>o`, `<Control>w`, `F10` — built in a loop from `SHORTCUTS:60` |
-| `Gtk.DropTarget` | 1 | — | `drop` → `on_file_dropped` | on the stack; `:copy`, `Gio::File` |
-| `Gtk.FileDialog` | 2 | — | — | open (title set to "Open a Document") and save-as, each with a `Gtk.FileFilter` "PDF" |
-| `Adw.Toast` | 3 distinct texts | — | — | "Failed to open the document. It is encrypted.", "Failed to open the document.", "That file is not a PDF.", plus "Failed to save the document." |
-
-Actions `win.open`, `win.open-with`, `win.save`, `win.save-as`,
-`win.main-menu`; the last three plus `open-with` start disabled and are
-enabled in `enable_document_actions:252`. `WindowState` is a four-symbol
-module and `proceed_with_state:447` resumes the interrupted open/drop/close.
-The progress bar is `GLib::Timeout`-driven, not `Adw.TimedAnimation`.
-
-## lib/paper_clip/primary_menu.rb — the primary menu
-
-Three sections, six items, from `SECTIONS:18`: `_New Window`
-(`app.new-window`); `_Save` (`win.save`, `<control>s`, hidden-when
-action-disabled), `Save _As…` (`win.save-as`, `<control><shift>s`,
-hidden-when), `Open _With…` (`win.open-with`, hidden-when);
-`_Keyboard Shortcuts` (`app.shortcuts`), `_About Paper Clip` (`app.about`).
-
-## lib/paper_clip/shortcuts_dialog.rb — the shortcuts dialog
-
-`Adwaita::ShortcutsDialog` with two `Adwaita::ShortcutsSection`s and **nine**
-`Adwaita::ShortcutsItem`s: General = Quit, New window, Close window,
-**Open menu (F10)**, Keyboard Shortcuts; Editor = Open, Save, Save As…,
-Add a keyword. Dialog title "Keyboard Shortcuts".
-
-## lib/paper_clip/document_view.rb — the editor page
-
-| Widget | × | CSS | Signals | Notes |
-|---|---:|---|---|---|
-| `Gtk.ScrolledWindow` | 1 | — | — | the root — no `Adw.Bin` wrapper; propagates natural height/width; `vadjustment.value = 0` per document |
-| `Adw.Clamp` | 1 | **none** | — | `content_clamp` |
-| `Gtk.Box` | 1 | — | — | vertical 18, margins 12/12/12/24 |
-| `Gtk.Label` | 1 | `title-1`, `long-filename` (dynamic) | — | basename; thresholds 45-with-space and 21-without |
-| `Adw.PreferencesGroup` | 2 | — | — | properties; "Non-Editable Properties" |
-| `Adw.EntryRow` | 5 | — | `notify::text` ×5 | Title, Author, Creation Software, Subject, Conversion Software — from `FIELDS:34` |
-| `PaperClip::DateRow` | 2 | — | `on_change` | Creation Date, Modification Date |
-| `PaperClip::KeywordList` | 1 | — | — | |
-| `PaperClip::DetailsList` | 1 | — | — | |
-| `Gtk.ShortcutController` | 1 | — | — | controller |
-| `Gtk.Shortcut` | 2 | — | `win.save`, `win.save-as` | `<Control>s`, `<Control><Shift>s` |
-| `Gtk.FileLauncher` | 1 | — | — | built per launch, `always_ask`, from `document.original_file` |
-
-No thumbnail widget. No `editor` action group. The document → window-title
-sync is not built.
-
-## lib/paper_clip/date_row.rb — a date property row
-
-| Widget | × | CSS | Signals | Notes |
-|---|---:|---|---|---|
-| `Adw.ActionRow` | 1 | — | — | subtitle `%x` or "No date set" |
-| `Gtk.Button` | 3 | `flat` (clear only) | `clicked` ×3 | clear (`edit-clear-symbolic`, "Remove Date"), "Today", "Tomorrow" |
-| `Gtk.MenuButton` | 1 | `flat` | — | `x-office-calendar-symbolic`, "Show Calendar" |
-| `Gtk.Popover` | 1 | — | — | |
-| `Gtk.Box` | 2 | `linked` (2nd) | — | vertical 6; horizontal homogeneous |
-| `Gtk.Calendar` | 1 | — | `day-selected` | `@syncing` re-entrancy guard; month 0-based |
-
-## lib/paper_clip/details_list.rb — read-only properties
-
-| Widget | × | CSS | Signals | Notes |
-|---|---:|---|---|---|
-| `Gtk.ListBox` | 1 | `boxed-list` | — | the root — no `Adw.Bin`; valign start, selection none |
-| `Adw.ActionRow` | 7 (repeater over `TITLES:21`) | `property` | — | Format, Layout, Duplex, Subtype, Contains JavaScript, Contains Attachments, Number of Pages |
-| `PaperClip::StringArrayRow` | 2 | — | — | Viewer Preferences, Permissions |
-
-Conditional: **none**. The page-count row is always visible.
-
-## lib/paper_clip/string_array_row.rb — expandable bulleted row
-
-`Adw.ExpanderRow` (1) holding one `ContentRow < Gtk.ListBoxRow` (1) holding a
-`Gtk.Label` with `dim-label`, halign start, margin-start 12, margin-top 18,
-text `"• %s\n"` per item.
-
-## lib/paper_clip/keyword_list.rb — the keywords group
-
-| Widget | × | CSS | Signals / actions | Notes |
-|---|---:|---|---|---|
-| `Adw.PreferencesGroup` | 1 | — | — | title "Keywords" |
-| `Gtk.Button` | 1 | `flat` | `keyword-list.add-keyword` | header-suffix, `list-add-symbolic`, "Add a keyword"; `visible` recomputed in `refresh:152` |
-| `Gtk.ListBox` | 1 | `boxed-list` | `row-activated` | rebuilt from the plain keyword array, not `bind_model` |
-| `Gtk.ShortcutController` + `Gtk.Shortcut` | 1 + 1 | — | `keyword-list.add-keyword` | `<Control>Return` |
-| `PaperClip::KeywordRow` | n (repeater) | — | — | one per keyword |
-| `Adw.PreferencesRow` | 1 | — | activatable | empty state |
-| `Gtk.CenterBox` | 1 | — | — | |
-| `Gtk.Label` | 1 | — | — | "Add Keyword", centred, wrap, 12px margins |
-| `Gtk.Image` | 1 | — | — | `list-add-symbolic`, halign end, hexpand, margin-end 12 |
-
-Focus: the newly appended row is focused after an add. There is no
-zero-to-one "focus the first child" branch and no `items-changed` subscription.
-
-## lib/paper_clip/keyword_row.rb — one editable keyword
-
-`Adw.EntryRow` (1), focusable, title "Keyword", `notify::text` → callback; a
-prefix `Gtk.Button` with `flat`, `window-close-symbolic` (**not** upstream's
-bundled `cross-symbolic`), valign center, tooltip "Delete Keyword",
-`clicked` → callback.
-
-## lib/paper_clip/drop_overlay.rb — the drag highlight
-
-`Adw.Bin` (1) → `Gtk.Overlay` (1) → `Gtk.Revealer` (1, crossfade,
-`can_target = false`, `visible = false`). Watches the drop target's
-`notify::current-drop` and adds/removes `overlay-drag-area` on the overlaid
-widget.
-
-## lib/paper_clip/save_changes_dialog.rb + document_row.rb
-
-`Adw.AlertDialog` (1) — heading "Save Changes?", body upstream's, responses
-`_Cancel` / `_Discard` (destructive) / `_Save` (suggested), default `save`,
-close `cancel`, `response` signal; `extra_child` is a
-`Gtk.ScrolledWindow` (1) holding a `Gtk.ListBox` (1, `boxed-list`) of
-`DocumentRow`s (n, repeater). `DocumentRow` is an `Adw.ActionRow` with a
-prefix `Gtk.CheckButton` checked by default, title = document title falling
-back to the basename, subtitle = basename.
-
-## Models and services
-
-| Port file | What it builds |
-|---|---|
-| `lib/paper_clip/document.rb` | a hand-written PDF parser/writer: object scan, `/Type /ObjStm` inflate, trailer merge, incremental-update append; Info accessors, keyword array, `has_xmp?`, `n_pages`, `contains_javascript?`, `contains_attachments?`; raises `EncryptedError` rather than opening an encrypted file; no `cached_file` copy; no XMP write-back |
-| `lib/paper_clip/pdf_strings.rb` | layout (6 + fallback), duplex (3 + fallback), subtype (5 + fallback), viewer preferences (7 + "No preferences"), permissions (8), "Unknown" |
-| `lib/paper_clip/document_manager.rb` | the open document and the dirty flag |
-| `lib/paper_clip/thread_manager.rb` | one worker thread, a `Queue`, `GLib::Idle` delivery |
-| `lib/paper_clip/style.rb` | the three CSS rules as a heredoc on a `Gtk::CssProvider` at `PRIORITY_APPLICATION` |
-| `lib/paper_clip/window_state.rb` | the four-symbol state module |
-| `lib/paper_clip/main.rb` | `-v/--version`, `-w/--new-window` (via `--gapplication-action`) |
-
-## Components that exist upstream and are built nowhere in the port
-
-- the password dialog and everything in it (`Adw.Dialog`, `Adw.ToolbarView`,
-  `Adw.HeaderBar`, `Adw.StatusPage.compact`, `Adw.Clamp`, `Gtk.Box`,
-  `Gtk.ListBox.boxed-list`, `Adw.PasswordEntryRow`,
-  `Gtk.Button.pill.suggested-action`, a capture-phase `Gtk.ShortcutController`
-  with `Return` and `Escape`, the `dialog` action group, the `closed` signal);
-- the page-one thumbnail (`Adw.Bin`, `Gtk.Image.icon-dropshadow`) and the
-  `Thumbnailer` behind it;
-- `Adw.VERSION` in the debug block;
-- the `document-view-drop` class on the editor clamp;
-- the `editor` action group on the editor page;
-- the document-title → window-title binding;
-- the page-count row's conditional visibility;
-- every packaging component: desktop entry and its `new-window` action,
-  AppStream metainfo, GSettings schema, D-Bus service file, the app icons, the
-  five bundled symbolic icons, the Nautilus extension;
-- the entire `po/` tree.
+1. **`DocumentThumbnail` has no port unit.** The editor page's first child is absent.
+2. **`Services/Thumbnailer` has no port unit.** No renderer, no `$TMPDIR/thumbnails` cache, no `ThumbnailError`.
+3. **`data/io.github.diegoivan.pdf_metadata_editor.service.in` has no port unit.** Upstream installs a D-Bus service file naming `--gapplication-service`; nothing in `data/` or `flake.nix` installs one.
+4. **No unit was identified by running the app.** `require "adwaita"` raises `Gtk::InitError` here (no display, no `Xvfb` in the closure), so every facet above on the port side is read from source, not observed. The CSS-class and signal columns are therefore claims, not results.
