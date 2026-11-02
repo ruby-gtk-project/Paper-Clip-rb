@@ -22,8 +22,9 @@ It is never checked out and never merged.
 
 ## Done
 
-Implemented and believed complete. "Believed" is load-bearing: no unit in
-this column has been observed running — see **Open gaps**, gap 5.
+Implemented. The editor page has been driven end to end; every other unit in
+this column is still a reading of source rather than a result — see **Open
+gaps**, gap 5.
 
 One upstream source file maps to one `lib/paper_clip/<thing>.rb`. A
 GtkBuilder template and the class that drives it become one declarative Ruby
@@ -37,6 +38,7 @@ class, so upstream's `.ui` files have no port file of their own.
 | `lib/paper_clip/window_state.rb` | the `WindowState` enum at the foot of `src/window.vala` |
 | `lib/paper_clip/primary_menu.rb` | `src/window.ui` `<menu id="primary_menu">` |
 | `lib/paper_clip/document_view.rb` | `src/DocumentView.vala` + `src/gtk/document-view.ui` |
+| `lib/paper_clip/document_thumbnail.rb` | `src/DocumentThumbnail.vala` |
 | `lib/paper_clip/date_row.rb` | `src/DateRow.vala` + `src/gtk/date-row.ui` |
 | `lib/paper_clip/details_list.rb` | `src/DetailsList.vala` + `src/gtk/details-list.ui` |
 | `lib/paper_clip/string_array_row.rb` | `src/StringArrayRow.vala` (both classes) |
@@ -58,6 +60,8 @@ class, so upstream's `.ui` files have no port file of their own.
 | `lib/paper_clip/main.rb` | `src/main.vala` + the `OptionEntry[]` table |
 | `lib/paper_clip/document.rb` | `src/Document.vala` (model, parse, save) |
 | `lib/paper_clip/pdf_strings.rb` | the string tables inside `src/Document.vala` |
+| `lib/paper_clip/thumbnailer.rb` | `src/Services/Thumbnailer.vala` |
+| `lib/paper_clip/poppler.rb` | no upstream file: Vala gets poppler-glib from a VAPI, this loads `Poppler-0.18.typelib` |
 | `lib/paper_clip/xmp_packet.rb` | `src/Document.vala:227-270` (the Exempi block) |
 | `lib/paper_clip/pdf_crypt.rb` | Poppler's own security handler, which upstream never writes itself |
 | `lib/paper_clip/document_manager.rb` | `src/Services/DocumentManager.vala` |
@@ -88,7 +92,7 @@ class, so upstream's `.ui` files have no port file of their own.
 
 ### Port-side tests
 
-130 examples, 0 failures, by `nix develop --command rspec --no-color -f progress`
+134 examples, 0 failures, by `nix develop --command rspec --no-color -f progress`
 at the last audit. They cover the date parser, the keyword round-trip, the
 `/Encrypt /P` bit map, the incremental-update writer, the security handler
 across four revisions, the XMP mirror and the dirty flag. No widget test of
@@ -100,9 +104,15 @@ Upstream components with no Ruby counterpart:
 
 | Upstream | Note |
 |---|---|
-| `src/DocumentThumbnail.vala` | the editor page's first child; see Blockers 1 and 3 |
-| `src/Services/Thumbnailer.vala` | off-loop render, `$TMPDIR/thumbnails` cache, `ThumbnailError`; see Blocker 1 |
-| `data/io.github.diegoivan.pdf_metadata_editor.service.in` | D-Bus activation; not blocked by anything, just not written |
+| `src/pdf-metadata-editor.gresource.xml` | a Ruby port has no gresource; the icons it carried are installed as a filesystem icon theme |
+
+Closed in round 3: `src/DocumentThumbnail.vala` →
+`lib/paper_clip/document_thumbnail.rb`, `src/Services/Thumbnailer.vala` →
+`lib/paper_clip/thumbnailer.rb`, and
+`data/io.github.diegoivan.pdf_metadata_editor.service.in` → the same name in
+`data/`. `lib/paper_clip/poppler.rb` is the one port file with no upstream
+counterpart: Vala gets poppler-glib from a VAPI, and this gets it from the
+`Poppler-0.18.typelib` the flake now builds.
 
 Upstream's three meson validation tests (`desktop-file-validate`,
 `appstreamcli validate`, `glib-compile-schemas --strict --dry-run`) have no
@@ -110,33 +120,39 @@ port equivalent in the Rakefile or `spec/`.
 
 ## Open gaps
 
-13 gaps across the four parity reports in `.reports/`, and clean=false.
+13 gaps across the four parity reports in `.reports/`, and clean=false. Four
+of them closed in round 3 and are struck through below rather than deleted,
+so the ledger still shows what was owed and when.
 
 From `.reports/component-parity.md` (5):
 
-1. The page-one preview does not exist. `document_view.rb:95` makes the
-   filename label the box's first child where upstream places
-   `PaperClipDocumentThumbnail`. The largest gap in the port.
-2. `Services/Thumbnailer` has no counterpart at all, so upstream's
-   degrade-on-huge-page path and its `FAILED_EXPORT` / `FAILED_TO_CACHE`
-   reporting have nowhere to live.
-3. No D-Bus service file, so nothing can start the app by its bus name.
-4. The About dialog's debug block cannot name the PDF or XMP library;
-   `about_dialog.rb:66-67` prints two sentences saying neither is linked where
-   upstream prints Poppler and Exempi versions.
-5. Nothing on the port side has been confirmed to render or fire. There is no
-   display and no X server in the closure or on the host; `require "adwaita"`
-   raises `Gtk::InitError`. Every parity verdict in the reports is a reading
-   of source. In particular `window.rb:151` builds an
-   `Adwaita::ApplicationWindow`, which the `ruby-gtk` skill records as broken
-   in these bindings — if the skill is right the window does not open and the
-   other verdicts are moot. Remedy is a one-line `flake.nix` change
-   (`pkgs.xvfb-run`), then drive and screenshot each unit.
+1. ~~The page-one preview does not exist.~~ Closed in round 3:
+   `document_thumbnail.rb` is the box's first child, and both it and the
+   `thumbnailer.rb` under it were driven.
+2. ~~`Services/Thumbnailer` has no counterpart.~~ Closed in round 3,
+   including the degrade-on-huge-page path and both error domains.
+3. ~~No D-Bus service file.~~ Closed in round 3:
+   `data/io.github.diegoivan.pdf_metadata_editor.service.in`, installed to
+   `share/dbus-1/services` with `@bindir@` substituted.
+4. Half-closed in round 3: the About dialog's debug block now prints a
+   Poppler version (and had been printing the literal strings
+   "Gtk::Version" and "GdkPixbuf::Version" in place of two others, which is
+   fixed). Exempi is still not linked and the block says so.
+5. Most of the port has still not been observed running. Round 3 drove the
+   application, the main window and the editor page under `xvfb-run`, which
+   answered the two questions that were blocking everything else:
+   `Adwaita::ApplicationWindow` does open, and three binding-name mistakes
+   (`Gtk::IconTheme.for_display`, `file.query_exists?`,
+   `Gtk::ShortcutTrigger.parse_string` in four files) were stopping the app
+   before it drew a window — all three in code the parity table had scored as
+   present. `FINDINGS.md` §8. The dialogs, the drop overlay, the keyword list
+   and the date row remain readings of source, and nothing has been
+   screenshotted.
 
-From `.reports/component-identification.md` (3): `DocumentThumbnail` and
-`Thumbnailer` have no port unit; `*.service.in` has no port unit. (These
-overlap gaps 1–3 above as identification-level findings and are counted
-separately by that report.)
+From `.reports/component-identification.md` (3): ~~`DocumentThumbnail` and
+`Thumbnailer` have no port unit; `*.service.in` has no port unit.~~ All three
+closed in round 3. (They overlapped gaps 1–3 above as identification-level
+findings and were counted separately by that report.)
 
 From `.reports/test-parity.md` (3): all three upstream meson validation tests
 are unported.
@@ -151,16 +167,14 @@ and installed only by the flake.
 
 ## Blockers
 
-1. **Poppler has no Ruby binding in the gtk4-era ruby-gnome family.** Every
-   metadata read/write, `n_pages`, the permission and viewer-preference flags,
-   the layout/duplex/subtype enums and the page render go through
-   libpoppler-glib. The old `poppler` gem is GTK2/Cairo-era. Options: load the
-   Poppler-0.18 typelib through gobject-introspection, or shell out to
-   `exiftool`/`qpdf`. Gates `document.rb`, `details_list.rb`,
-   `document_thumbnail.rb` and `thumbnailer.rb`. Worked around for the
-   metadata half by the port's own pure-Ruby PDF parser/writer
-   (`document.rb`, `pdf_strings.rb`, `pdf_crypt.rb`); not worked around for
-   rendering, which is why the thumbnail is absent.
+1. ~~**Poppler has no Ruby binding in the gtk4-era ruby-gnome family.**~~
+   **Settled in round 3.** `pkgs.poppler.override { introspectionSupport =
+   true; }` produces `Poppler-0.18.typelib`, and `lib/paper_clip/poppler.rb`
+   loads it with a `GObjectIntrospection::Loader` subclass. Poppler is used
+   for rendering only: the metadata half stays on the port's own pure-Ruby
+   parser/writer (`document.rb`, `pdf_strings.rb`, `pdf_crypt.rb`), which
+   opens files Poppler refuses. `FINDINGS.md` §1 has the three loader quirks
+   this took — the constructor race, the cairo-first requirement and the GVL.
 2. **Exempi (XMP) has no Ruby binding and no introspection data** — upstream
    ships its own `vapi/exempi-2.0.vapi`. `Document.save_xmp` and `has_xmp`
    (producer, creator tool, keywords, `dc:title`, CreateDate, ModifyDate,
@@ -168,11 +182,11 @@ and installed only by the flake.
    libexempi or an exiftool shell-out. Worked around by
    `lib/paper_clip/xmp_packet.rb`, which rewrites the packet in Ruby for files
    that carry one. `Xmp.init`/`terminate` have nothing to call.
-3. **`DocumentThumbnail`'s `Gtk.Snapshot` scaling** (`append_color`,
-   `append_scaled_texture` with a `Graphene.Rect`, `to_paintable`,
-   `Gsk.ScalingFilter`) is a thin GSK wrapper whose availability in the Ruby
-   bindings is unverified. Fallback is GdkPixbuf scaling plus a Cairo white
-   background, which loses the filter choice.
+3. ~~**`DocumentThumbnail`'s `Gtk.Snapshot` scaling**~~ **Settled in round
+   3.** `Gtk::Snapshot#append_color`, `#append_scaled_texture` with a
+   `Graphene::Rect`, `#to_paintable(nil)` and the `:nearest` / `:trilinear`
+   filter symbols all exist and were driven. No fallback was needed, so the
+   filter choice is upstream's.
 4. **`Adw.MessageDialog`**, which `SaveChangesDialog` subclasses, is
    deprecated in libadwaita 1.6, and the Ruby binding for the `<responses>`
    block with per-response appearance is unverified. Rebuilt on
@@ -208,13 +222,13 @@ and installed only by the flake.
 
 In order:
 
-1. Settle gap 5. Add `pkgs.xvfb-run` to the devShell, then instantiate
-   `Application` and `Window` and find out whether
-   `Adwaita::ApplicationWindow` works at all. Everything else in this port is
-   a reading, not a result, until this runs.
-2. `DocumentThumbnail` + `Thumbnailer` (Blockers 1 and 3).
-3. The three widget-level guards `TEST_PARITY.md` lists as owed, which need
-   (1) first.
-4. `data/*.service.in`.
+1. Check a driver into the repository. Round 3 drove the app from scratch
+   files and found three `NoMethodError`s in code the parity table had scored
+   as present; a `test/drive_*.rb` the devShell banner already advertises
+   would have caught them a round earlier. `Adwaita::ApplicationWindow` was
+   also answered on the way: it works.
+2. Drive every other unit. Only the editor page has been driven end to end.
+3. The three widget-level guards `TEST_PARITY.md` lists as owed.
+4. Screenshots, which nothing has produced yet.
 5. Restore the 5 dropped `.pot` keys; install the `.mo` files from the gem as
    well as from the flake.

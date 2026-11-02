@@ -7,6 +7,7 @@ require 'zlib'
 
 require_relative 'pdf_crypt'
 require_relative 'pdf_strings'
+require_relative 'poppler'
 require_relative 'thread_manager'
 require_relative 'xmp_packet'
 
@@ -16,15 +17,13 @@ module PaperClip
   # Ported from upstream's src/Document.vala. Upstream leans on Poppler for
   # reading and writing the Info dictionary and on Exempi for the XMP packet.
   #
-  # I could not load Poppler through gobject-introspection the way the adwaita
-  # gem loads its own typelib: there is no `Poppler-0.18.typelib` anywhere on
-  # this system and no `poppler` gem in the bundle, so `GObjectIntrospection::
-  # Loader.load("Poppler", …)` raises before it can register a single symbol.
-  # What that still costs the user is the page-one thumbnail, which is
-  # recorded as owed in `FINDINGS.md` with the cost of closing it, and named
-  # in the comment on DocumentView that describes the gap. libexempi has no
-  # Ruby binding either, so the XMP packet is edited as the XML it is — see
-  # XmpPacket — rather than left unwritten.
+  # Poppler is available to this port — `lib/paper_clip/poppler.rb` loads its
+  # introspection typelib — but it is used for rendering only, by
+  # get_page_for_index and the thumbnail behind it. Metadata is not read
+  # through it, deliberately: this parser accepts files Poppler refuses, and
+  # handing the reader over would narrow the set of documents the editor
+  # opens at all. libexempi has no Ruby binding, so the XMP packet is edited
+  # as the XML it is — see XmpPacket — rather than left unwritten.
   #
   # So this port reads and writes the PDF itself:
   #
@@ -250,6 +249,19 @@ module PaperClip
       declared_page_count || counted_page_objects
     end
 
+    # The page the thumbnail renders. Upstream forwards straight to the
+    # Poppler document it opened in its constructor
+    # (src/Document.vala:290-292); here the Poppler document is a second,
+    # independent read of the same bytes, so this answers nil rather than
+    # raising when Poppler will not have the file.
+    def get_page_for_index(index)
+      poppler_document.then do |document|
+        if document && index < document.n_pages
+          document.get_page(index)
+        end
+      end
+    end
+
     # /Names /EmbeddedFiles is the document-level attachment list; a file
     # whose name tree lives in a page annotation only shows up as an
     # /EmbeddedFile stream, so that is the fallback.
@@ -317,6 +329,39 @@ module PaperClip
         ::File.join(Dir.tmpdir, COPIES_DIRECTORY).tap do |directory|
           FileUtils.mkdir_p(directory, mode: 0o700)
         end
+      end
+
+      # --- Rendering ---------------------------------------------------------
+
+      # Poppler's own read of the file, used for nothing but rasterising a
+      # page. It is opened lazily rather than in the constructor, where
+      # upstream opens its one and only Poppler document: this port parses
+      # the file itself and accepts files Poppler rejects, and opening
+      # Poppler eagerly would hand that rejection to the user as a document
+      # that will not open at all rather than as a preview that is missing.
+      #
+      # `defined?` and not `||=`, so a file Poppler has already refused is
+      # refused once instead of being re-parsed for every thumbnail.
+      def poppler_document
+        unless defined?(@poppler_document)
+          @poppler_document = open_with_poppler
+        end
+        @poppler_document
+      end
+
+      # The cached copy and not the original: it is byte-identical, and it is
+      # the file every other read in this class goes through.
+      #
+      # Poppler::Error and not GLib::Error: the error domain's classes
+      # descend from GLib::ErrorInfo, not from GLib::Error, so a
+      # `rescue GLib::Error` here would let Poppler::Error::Damaged straight
+      # through. GLib::Error is kept beside it for the failures that come
+      # from Gio rather than from Poppler.
+      def open_with_poppler
+        Poppler.open(cached_file.uri, @password)
+      rescue Poppler::Error, GLib::Error => e
+        warn("Poppler could not open #{basename}: #{e.message}")
+        nil
       end
 
       # --- Encryption --------------------------------------------------------

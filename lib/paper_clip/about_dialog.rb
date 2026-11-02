@@ -2,6 +2,7 @@
 
 require 'adwaita'
 
+require_relative 'poppler'
 require_relative 'translations'
 
 module PaperClip
@@ -63,12 +64,21 @@ module PaperClip
         Libadwaita #{adwaita_version} (Runtime)
         GdkPixbuf #{pixbuf_version} (Runtime)
         Ruby #{RUBY_VERSION} #{RUBY_PLATFORM}
-        Poppler: not linked — this port parses the PDF itself
+        Poppler #{poppler_version} (Runtime) — rendering only; metadata is parsed by this port
         Exempi: not linked — this port edits the XMP packet as XML
 
         Running under Flatpak? #{flatpak?}
         OS Information? #{os_name}
       INFO
+    end
+
+    # Poppler is reached through its typelib rather than through a gem, so
+    # there are no MAJOR/MINOR/MICRO constants to assemble: poppler_get_version
+    # is the only version the library exposes, and it is a runtime one.
+    def self.poppler_version
+      Poppler.version
+    rescue StandardError
+      UNKNOWN_VERSION
     end
 
     def self.gtk_version = version_of(Gtk)
@@ -84,8 +94,11 @@ module PaperClip
       version_from_module(namespace)
     end
 
+    # `Version` is a module, not a value: `Gtk::Version.to_s` is the string
+    # "Gtk::Version", which is what the About dialog used to print for Gtk and
+    # GdkPixbuf. The version is in that module's STRING constant.
     def self.version_from_module(namespace)
-      namespace::Version.to_s
+      namespace::Version::STRING
     rescue NameError
       UNKNOWN_VERSION
     end

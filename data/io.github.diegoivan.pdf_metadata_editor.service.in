@@ -1,0 +1,19 @@
+# Ported from upstream's data/io.github.diegoivan.pdf_metadata_editor.service.in.
+#
+# This is the D-Bus activation file the desktop entry's DBusActivatable=true
+# promises exists: without it, the session bus has no way to start the app on
+# demand, and an `Exec` fallback launch is all the desktop can do. The name
+# is the application id Application::APP_ID registers, because that is the
+# bus name GApplication takes.
+#
+# @bindir@ is substituted at install time, as upstream's data/meson.build
+# does with configure_file (data/meson.build:43-50); here flake.nix's
+# installPhase does the substituting. The binary is the port's launcher,
+# which is what the gemspec installs and what the desktop entry's Exec names.
+#
+# --gapplication-service is handled by GApplication itself: the process
+# starts, owns the bus name and waits for the activation request rather than
+# opening a window of its own.
+[D-BUS Service]
+Name=io.github.diegoivan.pdf_metadata_editor
+Exec=@bindir@/paper-clip --gapplication-service

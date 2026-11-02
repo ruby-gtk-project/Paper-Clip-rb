@@ -89,11 +89,25 @@
           rsvg2 = rubyGnomeGem;
         };
 
+        # Poppler renders page one of the open PDF for the editor's thumbnail.
+        # nixpkgs builds poppler-glib without introspection by default, and the
+        # typelib is the whole point of having it here: there is no Poppler gem
+        # in the closure, so `Poppler-0.18.typelib` loaded through
+        # GObjectIntrospection is how lib/paper_clip/poppler.rb reaches it.
+        #
+        # Kept out of `gtkStack` deliberately: that list is the gem C
+        # extensions' build inputs, and adding to it would rebuild every
+        # ruby-gnome extension for a library none of them links against.
+        # nixpkgs' gobject-introspection writes absolute store paths into the
+        # typelib's shared-library field, so GI_TYPELIB_PATH is the only thing
+        # the loader needs — no LD_LIBRARY_PATH.
+        poppler = pkgs.poppler.override { introspectionSupport = true; };
+
         # `makeSearchPath` would take each package's *first* output, and glib's
         # first output is `bin`, which carries no typelibs — hence the explicit
         # `.out`. at-spi2-core is here for the Atk typelib.
         typelibPath = pkgs.lib.makeSearchPath "lib/girepository-1.0"
-          (map (drv: drv.out or drv) (gtkStack ++ [ pkgs.at-spi2-core ]));
+          (map (drv: drv.out or drv) (gtkStack ++ [ pkgs.at-spi2-core poppler ]));
 
         # nix/ and not the repo root: the root Gemfile is kettle-jem's
         # development bundle — rubocop, rspec, yard, the kettle-dev stack — and
@@ -146,7 +160,7 @@
           # and the gettext gem's own rmsgfmt does not implement it. The
           # compiled catalogues are the only thing that reaches the closure.
           nativeBuildInputs = [ pkgs.makeWrapper pkgs.gettext ];
-          buildInputs = [ gems ] ++ gtkStack;
+          buildInputs = [ gems poppler ] ++ gtkStack;
 
           dontBuild = true;
 
@@ -184,6 +198,19 @@
                 -d po -o $out/share/applications/io.github.diegoivan.pdf_metadata_editor.desktop
             fi
 
+            # The D-Bus activation file, with @bindir@ resolved to this
+            # output's bin/. Upstream substitutes the same variable through
+            # configure_file (data/meson.build:43-50); sed is that
+            # substitution without a build system to hold it. Without this
+            # file the desktop entry's DBusActivatable=true is a promise the
+            # session bus cannot keep.
+            if [ -f data/io.github.diegoivan.pdf_metadata_editor.service.in ]; then
+              install -d $out/share/dbus-1/services
+              sed "s|@bindir@|$out/bin|g" \
+                data/io.github.diegoivan.pdf_metadata_editor.service.in \
+                > $out/share/dbus-1/services/io.github.diegoivan.pdf_metadata_editor.service
+            fi
+
             if [ -f data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in ]; then
               install -d $out/share/metainfo
               msgfmt --xml --template data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in \
@@ -211,11 +238,19 @@
             # -rbundler/setup puts the bundled gems on the load path, and
             # GI_TYPELIB_PATH keeps GObject-Introspection from re-registering
             # types the cairo gem's C extension has already registered.
+            #
+            # BUNDLE_WITHOUT=test because `groups` above leaves rspec out of
+            # this closure while nix/Gemfile.lock still declares it:
+            # bundler/setup materialises every group in the lock and raised
+            # GemNotFound for rspec, so the installed launcher exited before
+            # it could require the app. The devShell is unaffected — it has
+            # both groups.
             makeWrapper ${gems.wrappedRuby}/bin/ruby $out/bin/${launcher} \
               --add-flags "-rbundler/setup" \
               --add-flags "-I$out/share/Paper-Clip/lib" \
               --add-flags "$out/share/Paper-Clip/exe/${launcher}" \
               --set GI_TYPELIB_PATH "${typelibPath}" \
+              --set BUNDLE_WITHOUT "test" \
               --prefix XDG_DATA_DIRS : "$out/share" \
               --prefix XDG_DATA_DIRS : "$out/share/gsettings-schemas/Paper-Clip-0.1.0" \
               --prefix XDG_DATA_DIRS : "${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}" \
@@ -257,6 +292,9 @@
             pkgs.xvfb-run
             pkgs.gsettings-desktop-schemas
             pkgs.adwaita-icon-theme
+            # Page-one rendering for the editor thumbnail, reached through its
+            # introspection typelib.
+            poppler
           ] ++ gtkStack;
 
           # Icons, GSettings schemas and the GTK portal all resolve through

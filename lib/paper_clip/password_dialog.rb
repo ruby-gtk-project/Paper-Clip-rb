@@ -166,9 +166,13 @@ module PaperClip
 
     private
 
+      # Gtk::ShortcutTrigger.new and not .parse_string: these bindings expose
+      # gtk_shortcut_trigger_parse_string as the class's only constructor, so
+      # the string goes to `new` and the named method does not exist. It
+      # raised NoMethodError the first time the page was built.
       def shortcut(accelerator, action)
         Gtk::Shortcut.new(
-          Gtk::ShortcutTrigger.parse_string(accelerator),
+          Gtk::ShortcutTrigger.new(accelerator),
           Gtk::NamedAction.new(action),
         )
       end

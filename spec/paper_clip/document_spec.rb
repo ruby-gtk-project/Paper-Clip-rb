@@ -384,4 +384,37 @@ RSpec.describe PaperClip::Document do
       expect(open_document(out).title).to eq('a(b)c\\d')
     end
   end
+
+  # get_page_for_index is the only thing in this class that goes through
+  # Poppler, and what matters about it is that a file Poppler will not take
+  # costs the thumbnail and nothing else.
+  describe "#get_page_for_index" do
+    it "answers a page for an index the document has" do
+      expect(open_document(classic).get_page_for_index(0)).to be_a(Poppler::Page)
+    end
+
+    it "answers nil past the end rather than letting Poppler return a null page" do
+      expect(open_document(classic).get_page_for_index(5)).to be_nil
+    end
+
+    it "answers nil for a file this parser accepts and Poppler refuses" do
+      path = File.join(@dir, "no-xref.pdf")
+      File.binwrite(path, "%PDF-1.7\n1 0 obj\n<< /Title (x) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n")
+      document = open_document(path)
+
+      expect(document.title).to eq("x")
+      expect { expect(document.get_page_for_index(0)).to be_nil }
+        .to output(/Poppler could not open/).to_stderr
+    end
+
+    it "refuses such a file once instead of re-parsing it for every thumbnail" do
+      path = File.join(@dir, "no-xref.pdf")
+      File.binwrite(path, "%PDF-1.7\n1 0 obj\n<< /Title (x) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n")
+      document = open_document(path)
+      capture = -> { document.get_page_for_index(0) }
+
+      expect(&capture).to output(/Poppler could not open/).to_stderr
+      expect(&capture).not_to output.to_stderr
+    end
+  end
 end

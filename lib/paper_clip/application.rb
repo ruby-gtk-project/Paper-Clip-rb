@@ -97,10 +97,16 @@ module PaperClip
       # add_search_path and not add_resource_path: the icons are installed as
       # files under data/icons, in the hicolor layout the icon-theme
       # specification describes.
+      #
+      # get_for_display and not for_display: the C name is
+      # gtk_icon_theme_get_for_display, and these bindings keep the `get_`
+      # prefix on a static method that takes an argument. The short name does
+      # not exist, so startup raised NoMethodError and the app could not open
+      # a window at all.
       def register_icons
         Gdk::Display.default.then do |display|
           if display
-            Gtk::IconTheme.for_display(display).add_search_path(ICON_DIRECTORY)
+            Gtk::IconTheme.get_for_display(display).add_search_path(ICON_DIRECTORY)
           end
         end
       end
@@ -156,8 +162,11 @@ module PaperClip
         end
       end
 
+      # query_exists and not query_exists?: the bindings keep the C name, and
+      # the trailing question mark was a NoMethodError on every file the
+      # desktop or the command line handed the application.
       def pdf?(file)
-        file.query_exists? && file.query_info('standard::*', :nofollow_symlinks).content_type == PDF_MIME
+        file.query_exists && file.query_info('standard::*', :nofollow_symlinks).content_type == PDF_MIME
       rescue GLib::Error
         false
       end

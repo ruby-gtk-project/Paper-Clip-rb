@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` branch, round 2 |
+| Port | `ruby` branch, round 3 |
 | Upstream tests | **0** |
 | Ported | 0 |
 | Gaps | 0 |
-| Port tests (Extra) | **130 examples, 0 failures** |
+| Port tests (Extra) | **134 examples, 0 failures** |
 | Test command | `nix develop --command rspec --require ./spec/spec_helper.rb -Ilib -Ispec spec` |
 
 ## Upstream has no test suite

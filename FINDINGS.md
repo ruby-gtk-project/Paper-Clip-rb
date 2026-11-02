@@ -8,48 +8,65 @@ an answer or a price tag.
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
 | Port | `ruby` branch |
-| Round | 2 |
+| Round | 3 |
 
-## 1. Poppler through GObject-Introspection — **tried, unavailable, still owed**
+## 1. Poppler through GObject-Introspection — **answered**
 
 Upstream reads and writes the PDF through `Poppler.Document`
 (`src/Document.vala:28-35`, `:463-466`) and renders page one through
 `Poppler.Page` (`src/Services/Thumbnailer.vala`).
 
-What was tried, in this round:
+Round 2 reported the typelib as absent and the thumbnail as owed. The route
+it named — add the typelib to the flake and load it with
+`GObjectIntrospection::Loader` — is the one taken this round, and it worked.
 
-```ruby
-require "gobject-introspection"
-GObjectIntrospection::Loader.load("Poppler", Module.new)
-# => raises before it can register a single symbol
+**What was missing, and why it looked unavailable:** nixpkgs builds
+`poppler-glib` with introspection off by default, so the package in the
+closure genuinely carried no `lib/girepository-1.0`. The override is one
+line:
+
+```nix
+poppler = pkgs.poppler.override { introspectionSupport = true; };
 ```
 
-There is no `Poppler-0.18.typelib` anywhere on this system, no `poppler` gem
-in `nix/Gemfile.lock`, and `nixpkgs#rubyPackages_3_4` has no `poppler` entry
-to add. The typelib ships in a separate output depending on the distribution,
-and the Ruby `poppler` gem is GTK3-era.
+which yields `Poppler-0.18.typelib` with the absolute store path to
+`libpoppler-glib.so.8` written into its shared-library field — so
+`GI_TYPELIB_PATH` alone is enough and no `LD_LIBRARY_PATH` is involved. It is
+added to `typelibPath`, to the devShell and to the package's `buildInputs`,
+and deliberately *not* to `gtkStack`: that list is the gem C extensions'
+build inputs, and widening it would rebuild every ruby-gnome extension for a
+library none of them links against.
 
-**What this costs the user, today:** the page-one thumbnail. There is no
-preview above the filename, so a user cannot confirm they opened the right
-PDF before editing its metadata. That is one widget unit
-(`src/DocumentThumbnail.vala`) and one service
-(`src/Services/Thumbnailer.vala`) with no port file, and the
-`icon-dropshadow` class that belongs on that image is attached nowhere.
+**Three things the loader did not do by itself**, each now in
+`lib/paper_clip/poppler.rb`:
 
-**What it does not cost:** everything else `Poppler.Document` was used for.
-`lib/paper_clip/document.rb` parses the file itself — objects, object
-streams, trailers, the Info dictionary, the catalog, the viewer preferences,
-the page tree — and writes an incremental update back. All of that is pinned
-by `spec/paper_clip/document_spec.rb`.
+| Problem | Answer |
+|---|---|
+| `Poppler::Document` has seven constructors, and the loader folds them into one `initialize` that tries each until one accepts the arguments. `new_from_data` takes two strings, so it won the race for `(uri, password)` and reported every valid PDF as `Poppler::Error::Damaged` — it had read the URI as the file's bytes | `Poppler.open` allocates and calls the private `initialize_new_from_file` the loader also defines, which names the signature instead of guessing at it |
+| `Poppler::Page#render` takes a `cairo_t`, and nothing converts a `Cairo::Context` into one unless the cairo gem is loaded first | `require 'cairo'` precedes the typelib load |
+| The GVL is held across C calls by default, which would have made the "off-thread" render stall the main loop anyway | `Poppler::Loader#should_unlock_gvl?` names `render` and the two `render_for_printing` variants |
 
-**Estimated cost of closing the thumbnail:** two routes.
+`Poppler::Error::Damaged` is also worth recording: the error domain's classes
+descend from `GLib::ErrorInfo`, **not** from `GLib::Error`, so a
+`rescue GLib::Error` lets them straight through. `Document#open_with_poppler`
+rescues `Poppler::Error` beside it.
 
-| Route | Work | Risk |
-|---|---|---|
-| Add a Poppler typelib to the flake and load it through `GObjectIntrospection::Loader` | Add `poppler` (and its introspection output where separate) to `gtkStack`, confirm `Poppler-0.18.typelib` lands on `GI_TYPELIB_PATH`, then write `document_thumbnail.rb` and `thumbnailer.rb` against the C API shape | The loader has to map `Poppler.Page.render(cairo_context)`, and the Cairo surface has to reach `Gtk::Snapshot`. The `cairo` gem is already in the closure, so this is plumbing, not research |
-| Rasterise out of process | Shell out to a renderer and read a PNG back | Adds a runtime dependency the flake would have to pin, and `Thumbnailer`'s whole point is that the render is off the main loop but *in* the process |
+**What the user gets:** the page-one preview, in
+`lib/paper_clip/document_thumbnail.rb` and `lib/paper_clip/thumbnailer.rb` —
+white backing rectangle, `NEAREST`/`TRILINEAR` filter choice, `MAX_SIZE =
+350`, the off-thread render and the downscaled PNG cache in
+`$TMPDIR/thumbnails`. The `icon-dropshadow` class is on the image it belongs
+on. `Document#get_page_for_index` is the model-layer accessor that was
+missing with it.
 
-The first route is the one to take. It is not blocked on anything but work.
+**What Poppler is still not used for:** reading or writing metadata.
+`lib/paper_clip/document.rb` continues to parse the file itself — objects,
+object streams, trailers, the Info dictionary, the catalog, the viewer
+preferences, the page tree — and to write an incremental update back, all of
+it pinned by `spec/paper_clip/document_spec.rb`. Poppler is opened lazily,
+for rendering only, and a file Poppler refuses but this parser accepts costs
+the preview and nothing else. That is deliberate: making Poppler the reader
+would narrow the set of files the editor opens at all.
 
 ## 2. libexempi for XMP — **answered without a binding**
 
@@ -163,31 +180,49 @@ from the environment at the first lookup, and `set_locale` after that does not
 move it. The German and French assertions therefore run in a child process
 started with `LANGUAGE` set, which is also how a user gets a translation.
 
-## 8. Nothing has been driven or screenshotted — **owed, and blocked here**
+## 8. The app had never been started — **driven this round, and it was broken**
 
-`.claude/skills/ruby-gtk-testing` ships a headless driver. It has not been
-run, in round 1 or round 2, for one reason: GTK cannot initialise in this
-environment.
+Rounds 1 and 2 recorded this as blocked on there being no display. The
+devShell now carries `pkgs.xvfb-run`, so the block is gone, and the app was
+driven for the first time:
 
+```sh
+nix develop --command xvfb-run -a ruby exe/paper-clip <file.pdf>
 ```
-$ nix develop --command ruby -e 'require "gtk4"'
-failed to initialize GTK (Gtk::InitError)
-```
 
-There is no display, and no `Xvfb` or `xvfb-run` in the closure or on the
-host. GTK4 has no headless backend to fall back on.
+It did not start. Three separate binding-name mistakes stood between the
+entry point and a window, each of which `ruby -c` and a successful `require`
+pass straight over, and each of which a static reading of the source had
+already called parity:
 
-**What that means for every widget verdict in `COMPONENT_PARITY.md`:** it is a
-static reading of source. A handler wired to an empty method would pass it.
-Three of the checks `TEST_PARITY.md` lists as owed — the `@loading` guard, the
-`@syncing` guard and `proceed_with_state` — are widget-level and are not
-written, because a spec that cannot be executed is not evidence.
+| Written | Exists | Where | Effect |
+|---|---|---|---|
+| `Gtk::IconTheme.for_display(display)` | `get_for_display` | `application.rb`, in `startup` | `NoMethodError` before any window was built — the app could not open at all |
+| `file.query_exists?` | `query_exists` | `application.rb`, in `pdf?` | `NoMethodError` on every file the desktop or the command line handed it |
+| `Gtk::ShortcutTrigger.parse_string(accel)` | `Gtk::ShortcutTrigger.new(accel)` | `window.rb`, `document_view.rb`, `password_dialog.rb`, `keyword_list.rb` | `NoMethodError` the first time each of those four pages was built — so every keyboard shortcut in the app, including the Ctrl+S the parity table listed as present |
 
-**Estimated cost of closing it:** add `pkgs.xvfb-run` (or
-`pkgs.xorg.xorgserver`) to the devShell, then run the driver per unit. That is
-a one-line flake change plus the driving itself. It is the first thing round 3
-should do, because it is what turns every other verdict from a reading into a
-result.
+The pattern behind all three: these bindings keep the C name. A static
+`get_` prefix survives, a `gboolean` return does not become `?`, and a
+constructor named `*_parse_string` is reachable only as `new`. Round 2's
+`COMPONENT_PARITY.md` scored the shortcut controllers as parity on a reading
+of the source; they had never once been constructed.
+
+The installed launcher was broken too, for an unrelated reason:
+`bundler/setup` materialises every group in `nix/Gemfile.lock`, including the
+`test` group that `groups = [ "default" ]` deliberately leaves out of the
+runtime closure, and raised `Bundler::GemNotFound` for rspec. The wrapper now
+sets `BUNDLE_WITHOUT=test`. Before that fix the only way the app ran was from
+the repository, where the devShell's `RUBYLIB` happened to cover for it.
+
+**The lesson, stated plainly:** a widget verdict reached by reading source is
+worth very little. Everything claimed for the thumbnail this round was
+checked by running it — the editor page reaching `GtkRenderNodePaintable` at
+350×525 for a portrait page, both the memory and the PNG-cache branches of
+`Thumbnailer`, and both editor shortcuts resolving to `action(win.save)` and
+`action(win.save-as)` and activating.
+
+**Still owed:** screenshots, and a driver checked into the repository rather
+than written per session. The scripts used this round were scratch files.
 
 ## 9. The spec harness is not the repo's own
 

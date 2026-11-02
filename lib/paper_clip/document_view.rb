@@ -4,12 +4,14 @@ require 'adwaita'
 
 require_relative 'date_row'
 require_relative 'details_list'
+require_relative 'document_thumbnail'
 require_relative 'keyword_list'
 require_relative 'translations'
 
 module PaperClip
-  # DocumentView is the editor page: the filename as a heading, the editable
-  # metadata, the keyword list, and the non-editable properties below.
+  # DocumentView is the editor page: a preview of page one, the filename as a
+  # heading, the editable metadata, the keyword list, and the non-editable
+  # properties below.
   #
   # Ported from upstream's src/DocumentView.vala and
   # src/gtk/document-view.ui, including the Ctrl+S / Ctrl+Shift+S shortcut
@@ -26,19 +28,6 @@ module PaperClip
   # (src/DocumentView.vala:63), and it is a push rather than a bind for the
   # same reason: the title row's notify::text re-sets it, so the titlebar and
   # the window list track the document's title as it is typed.
-  #
-  # I did not build the page-one preview, so a user cannot see which PDF they
-  # opened before they start editing its metadata, and a transparent or
-  # mis-selected document looks exactly like the right one — because I am too
-  # stupid to have built it.
-  # Upstream: `src/gtk/document-view.ui:25` places a
-  # `PaperClipDocumentThumbnail`; `src/DocumentThumbnail.vala` snapshots the
-  # page over a white rectangle with `NEAREST`/`TRILINEAR` filtering at
-  # `MAX_SIZE = 350`; `src/Services/Thumbnailer.vala` renders it off-thread and
-  # caches a downscaled PNG in `$TMPDIR/thumbnails`.
-  # Port: `lib/paper_clip/document_view.rb` appends the title label straight
-  # into the box, and `lib/paper_clip/document.rb` has no counterpart to
-  # `Document.get_page_for_index`. The cost of closing it is in `FINDINGS.md`.
   class DocumentView
     include Translations
 
@@ -92,6 +81,7 @@ module PaperClip
           clamp.child = content_box
 
           content_box.tap do |box|
+            box.append(document_thumbnail.build)
             box.append(title_label)
             box.append(properties_group)
             box.append(keyword_list.build)
@@ -122,6 +112,7 @@ module PaperClip
       show_filename(document)
       show_window_title
       details_list.update(document)
+      document_thumbnail.update(document)
       keyword_list.update(document)
       entry_rows[:title].grab_focus_without_selecting
       scroller.vadjustment.value = 0
@@ -182,6 +173,7 @@ module PaperClip
     def creation_row = @creation_row ||= DateRow.new(_('Creation Date'))
     def modification_row = @modification_row ||= DateRow.new(_('Modification Date'))
     def details_list = @details_list ||= DetailsList.new
+    def document_thumbnail = @document_thumbnail ||= DocumentThumbnail.new
     def keyword_list = @keyword_list ||= KeywordList.new
 
     def action_group = @action_group ||= Gio::SimpleActionGroup.new
@@ -198,9 +190,13 @@ module PaperClip
         Adwaita::EntryRow.new.tap { |row| row.title = title }
       end
 
+      # Gtk::ShortcutTrigger.new and not .parse_string: these bindings expose
+      # gtk_shortcut_trigger_parse_string as the class's only constructor, so
+      # the string goes to `new` and the named method does not exist. It
+      # raised NoMethodError the first time the page was built.
       def shortcut(accelerator, action)
         Gtk::Shortcut.new(
-          Gtk::ShortcutTrigger.parse_string(accelerator),
+          Gtk::ShortcutTrigger.new(accelerator),
           Gtk::NamedAction.new(action),
         )
       end

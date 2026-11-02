@@ -3,24 +3,31 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` branch, round 2 |
-| Units compared | 21 |
-| Units with no port file at all | **2** (was 6) |
-| Driven (signals actually fired) | **0** — no driver run exists |
+| Port | `ruby` branch, round 3 |
+| Units compared | 23 |
+| Units with no port file at all | **0** (was 2) |
+| Driven (signals actually fired) | the editor page: file opened, thumbnail rendered, both shortcuts resolved and `win.save` activated |
 | Screenshots | **none** |
 
 The file map is in `PORTING.md`. Costs and open questions are in
 `FINDINGS.md`. Message keys are in the translation section at the foot of this
 file.
 
-## Two things this ledger cannot claim, and does not
+## What this ledger can and cannot claim
 
-- **Nothing was driven.** Step 5 of the component-parity skill is unsatisfied
-  for every unit. Every behaviour row below is a static reading of source; a
-  handler connected to an empty method would pass it. GTK cannot initialise
-  in this environment — no display, no `Xvfb` — so the driver in
-  `.claude/skills/ruby-gtk-testing` has never run. `FINDINGS.md` §8 has the
-  diagnosis and the one-line fix.
+- **The app was driven this round, for the first time, and it did not start.**
+  Three binding-name mistakes stood between the entry point and a window, and
+  one of them — `Gtk::ShortcutTrigger.parse_string`, which does not exist —
+  was in four files whose shortcut controllers this very table had scored as
+  parity on a reading of the source. They had never been constructed.
+  `FINDINGS.md` §8 lists all three and the installed-launcher failure beside
+  them. Every row below that is still only a reading of source should be read
+  in that light.
+- **What was driven:** opening a PDF from the command line, the editor page
+  appearing with a rendered page-one preview (`GtkRenderNodePaintable`,
+  350×525 for a portrait page), both branches of `Thumbnailer` — memory and
+  PNG cache — and both editor shortcuts resolving to `action(win.save)` and
+  `action(win.save-as)`, with `win.save` activating from inside the page.
 - **Nothing was screenshotted.** Step 4's second half did not happen, so
   every `Style` verdict is a reading of class names and every claim about a
   glyph is a reading of a file name.
@@ -67,10 +74,14 @@ model layer, through 130 spec examples. See `TEST_PARITY.md`.
 
 Open on this unit:
 
-- **The debug block cannot print a Poppler or an Exempi version**, because the
-  port links neither. GdkPixbuf, Gtk, Libadwaita and Ruby are printed, and the
-  two absences are stated in the block itself. The cost is `FINDINGS.md` §1
-  and §2.
+- **The debug block prints a Poppler version as of round 3**
+  (`Poppler.version`, a runtime one where upstream's is compile-time), with
+  the note that Poppler is used for rendering only. Exempi is still not
+  linked and the block says so; `FINDINGS.md` §2. Two versions it printed
+  wrong until this round are also fixed: `Gtk::Version.to_s` is the string
+  `"Gtk::Version"`, not a version, so the block read "Gtk Gtk::Version" and
+  "GdkPixbuf GdkPixbuf::Version". The value is in that module's `STRING`
+  constant, and the block now prints 4.22.4 and 2.44.8.
 - **The issue URL points at the port, the website at upstream**
   (`about_dialog.rb:27` vs `application.vala:188`). A bug in the port is not
   upstream's to triage. Recorded as a divergence.
@@ -146,29 +157,26 @@ GTK's.
 | `Gtk.ScrolledWindow` | 1 | 1 | — | — | — | parity |
 | `Adw.Clamp` | 1 | 1 | ✓ `document-view-drop` | — | — | parity |
 | `Gtk.Box` | 1 | 1 | — | — | — | parity |
-| `DocumentThumbnail` | 1 | **0** | ✗ `icon-dropshadow` | — | — | **gap** |
+| `DocumentThumbnail` | 1 | 1 | ✓ `icon-dropshadow` | — | — | parity |
 | `Gtk.Label` (title) | 1 | 1 | ✓ `title-1`, `long-filename` | — | — | parity |
 | `Adw.PreferencesGroup` | 2 | 2 | — | — | ✓ | parity |
 | `Adw.EntryRow` | 5 | 5 | — | ✓ `notify::text` | ✓ | parity |
 | `DateRow` | 2 | 2 | — | ✓ | ✓ | parity |
 | `KeywordList` | 1 | 1 | — | — | — | parity |
 | `DetailsList` | 1 | 1 | — | — | — | parity |
-| `Gtk.ShortcutController` + `Gtk.Shortcut` | 1 + 2 | 1 + 2 | — | ✓ | — | parity |
+| `Gtk.ShortcutController` + `Gtk.Shortcut` | 1 + 2 | 1 + 2 | — | ✓ driven: `<Control>s` → `action(win.save)`, `<Shift><Control>s` → `action(win.save-as)` | — | parity |
 | `Gtk.FileLauncher` | 1 | 1 | — | ✓ incl. the declined branch | — | correspondence: one per launch, where upstream keeps one and binds `original-file` to it |
 | `editor` action group | 1 | 1 | — | ✓ | — | parity |
 | `document.title` → `root.title` | 1 | 1 | — | ✓ | — | parity |
 
-The gap: **the page-one preview is not built.** Upstream shows a rendered
-thumbnail of page 1 above the filename (`document-view.ui:25`,
-`src/DocumentThumbnail.vala`, `src/Services/Thumbnailer.vala`): a white
-background rectangle under the page so transparent PDFs are visible, a
-`Gtk.Snapshot` scale with `NEAREST` upscaling and `TRILINEAR` downscaling,
-`MAX_SIZE = 350`, and a PNG downscale cache in `$TMPDIR/thumbnails` for pages
-bigger than `max_size² × 2.5`. The port shows nothing there, so a user cannot
-confirm they opened the right PDF before editing it, and the
-`icon-dropshadow` class on that image is attached nowhere. The class comment
-on `DocumentView` states it in the first person; `FINDINGS.md` §1 holds the
-cost.
+The preview is built. `lib/paper_clip/document_thumbnail.rb` and
+`lib/paper_clip/thumbnailer.rb` carry upstream's white backing rectangle under
+the page so a transparent PDF is still visible, the `Gtk.Snapshot` scale with
+`NEAREST` upscaling and `TRILINEAR` downscaling, `MAX_SIZE = 350`, the
+off-thread render, and the PNG downscale cache in `$TMPDIR/thumbnails` for
+pages bigger than `max_size² × 2.5`. Both branches were driven. The
+`icon-dropshadow` class is on the image. `FINDINGS.md` §1 records how the
+Poppler typelib was obtained and the three loader quirks it took.
 
 The two-way binding remains a correspondence: upstream's `BindingGroup` is
 `SYNC_CREATE | BIDIRECTIONAL` on eight properties; the port pushes with
@@ -176,6 +184,42 @@ The two-way binding remains a correspondence: upstream's `BindingGroup` is
 the eight are located, the eighth (`original-file` → `file_launcher.file`) has
 no counterpart because the launcher is rebuilt per call, and the window title
 is now a ninth push rather than a bind.
+
+## Unit: page preview — `src/DocumentThumbnail.vala` → `document_thumbnail.rb`
+
+| Facet | Up | Port | Verdict |
+|---|---|---|---|
+| `Adw.Bin` root holding one `Gtk.Image` | 1 + 1 | 1 + 1 | parity |
+| `icon-dropshadow` on the image | 1 | 1 | parity |
+| `MAX_SIZE = 350`, `pixel_size = MAX_SIZE / 2` | 2 | 2 | parity |
+| `margin-top = 12` (set on the child in `document-view.ui:26`) | 1 | 1 | parity: set on the image rather than on the bin |
+| white backing rectangle under the texture | 1 | 1 | parity: `append_color` with opaque white before `append_scaled_texture` |
+| filter choice | `NEAREST` when scaling up, `TRILINEAR` when scaling down | same | parity. Upstream also assigns `LINEAR` and overwrites it in both branches, so it never reaches the snapshot; not reproduced |
+| `compute_scaled_size` (the AdwAvatar fill) | 1 | 1 | parity, including that a portrait page ends up taller than `MAX_SIZE` |
+| `scale_factor` in the target size | 1 | 1 | parity: the widget's, so the snapshot is in device pixels |
+| `document` setter re-renders | 1 | 1 | correspondence: `update(document)` where upstream has a property setter |
+| destructor clearing the image | 1 | 0 | correspondence: Ruby has no destructor, and the paintable's last reference is the collector's business |
+| failure path | `critical` and leave the image cleared | `warn` and leave the image cleared | parity |
+
+Driven: a 400×600 page rendered to a `GtkRenderNodePaintable` of 350×525.
+
+## Unit: thumbnail service — `src/Services/Thumbnailer.vala` → `thumbnailer.rb`
+
+| Facet | Up | Port | Verdict |
+|---|---|---|---|
+| shared instance (`get_default`) | 1 | 1 | parity: `Thumbnailer.default` |
+| `max_size` set by the caller, starting at zero | 1 | 1 | parity |
+| `area_threshold = 2.5` | 1 | 1 | parity |
+| memory format from byte order | `B8G8R8A8_PREMULTIPLIED` / `A8R8G8B8_PREMULTIPLIED`, cached | same, cached | parity |
+| surface allocated before the render | 1 | 1 | parity: `Cairo.ImageSurface` ARGB32 at the page's truncated size |
+| render off the main loop | ThreadPool with one worker | `ThreadManager`'s one worker, with the GVL released across `Poppler::Page#render` | correspondence: one job covers render and load where upstream awaits each separately. `FINDINGS.md` §1 on the GVL |
+| big page → downscaled PNG | `write_to_png`, then `from_file_at_size` | same | parity. Driven: the cache file appears in `$TMPDIR/thumbnails` |
+| small page → memory texture | `Gdk.MemoryTexture` over a copy of the surface bytes | same; `surface.data` *is* the copy | parity. Driven |
+| step loop for the scale factor | 0.1 up by 0.1 while below 0.8 | same seven steps, else 0.8 | parity, including upstream multiplying the pixel count by the factor rather than its square |
+| cache path | `$TMPDIR/thumbnails/<basename>.png` | same | parity |
+| cache directory mode | `0777` | `0700` | **deliberate divergence**: a world-writable directory in a shared `/tmp`, named after the open document, is one another user can replace between the write and the read. `Document`'s copies directory is `0700` for the same reason |
+| `ThumbnailError.FAILED_EXPORT` / `FAILED_TO_CACHE` | 2 | 2 | parity: `Thumbnailer::ExportError` / `CacheError` |
+| pre-creating the empty cache file | 1 | 0 | correspondence: `write_to_png` creates it a line later; only the directory has to exist first |
 
 ## Unit: date row — `src/DateRow.vala` + `src/gtk/date-row.ui` → `date_row.rb`
 
@@ -313,10 +357,15 @@ cancellation.
 
 | Upstream unit | What the user loses |
 |---|---|
-| `src/DocumentThumbnail.vala` | the page-one preview. See the editor-page unit and `FINDINGS.md` §1 |
-| `src/Services/Thumbnailer.vala` | the off-thread render, the white backing rectangle, the filter choice and the `$TMPDIR/thumbnails` PNG cache behind it |
-| `data/*.service.in` | no D-Bus activation, although the desktop entry still declares `DBusActivatable=true` — which makes this a live inconsistency, not just an absence |
 | `src/pdf-metadata-editor.gresource.xml` | nothing: a Ruby port has no gresource, and the icons it carried are installed as a filesystem icon theme |
+
+Closed this round: `src/DocumentThumbnail.vala` →
+`lib/paper_clip/document_thumbnail.rb`, `src/Services/Thumbnailer.vala` →
+`lib/paper_clip/thumbnailer.rb`, and
+`data/io.github.diegoivan.pdf_metadata_editor.service.in` → the same filename
+in `data/`, with `@bindir@` substituted by the flake's `installPhase` and the
+result installed to `share/dbus-1/services` — so the desktop entry's
+`DBusActivatable=true` is no longer a promise nothing keeps.
 
 ## Document and services
 
@@ -330,7 +379,7 @@ is executed by the spec suite.
 | `/Encrypt` — open, read and re-encrypt | correspondence: `PdfCrypt` where upstream has Poppler's handler. `/R` 2 to 6, user and owner passwords |
 | XMP read (`subtype`, `has_xmp?`) | parity |
 | XMP written on save | parity on behaviour: Producer, CreatorTool, Keywords, `dc:title`, CreateDate, ModifyDate, MetadataDate, with the two dates deleted when nil. Correspondence on mechanism: XML editing where upstream has Exempi (`FINDINGS.md` §2) |
-| `get_page_for_index` | **gap**, which is the thumbnail gap at the model layer |
+| `get_page_for_index` | correspondence: Poppler opens the cached copy lazily, for rendering only, and a file Poppler refuses but this parser accepts answers nil rather than raising. Four spec examples |
 | `ThreadManager` | correspondence: one worker, work serialised, results delivered on `GLib::Idle`; an explicit callback where upstream resumes a coroutine |
 | `DocumentManager` | parity, plus a fix: a notification from a replaced document no longer raises this manager's dirty flag |
 | `PdfStrings` | parity: all 29 enum strings, marked |
@@ -396,11 +445,13 @@ Verified end to end, not assumed: `LANGUAGE=de` returns
 
 | | |
 |---|---|
-| Units compared | 21 |
-| Upstream units with no port file | 2 (+ 1 packaging file) |
-| Distinct behaviour gaps named above | 4 — the thumbnail, its model-layer accessor, D-Bus activation, and saving to a path rather than a URI |
+| Units compared | 23 |
+| Upstream units with no port file | 0 |
+| Distinct behaviour gaps named above | 1 — saving to a path rather than a URI |
 | Message keys | 96 / 96, 0 gaps |
-| Signals driven | **0** |
+| Signals driven | the editor page, end to end; every other unit still unread by a driver |
 | Screenshots taken | **0** |
 
-The last two lines are the ones that decide how much the rest is worth.
+Driving the app for the first time cost three `NoMethodError`s that this table
+had scored as parity. The remaining units have not been driven, and that is
+what decides how much the rest is worth.
