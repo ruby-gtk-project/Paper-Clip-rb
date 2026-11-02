@@ -5,18 +5,42 @@
 | Upstream | `origin/main` (`src/*.vala` + `src/gtk/*.ui` + `src/window.ui`) |
 | Port | `ruby` branch, `lib/paper_clip/*.rb` |
 | User-facing components identified | **26** |
-| Already present in `lib/` | **24** |
-| Missing | **2** (`DocumentThumbnail`, `Services/Thumbnailer`) |
+| Already present in `lib/` | **26** |
+| Missing | **0** |
 
 Read with `.reports/component-identification.md`, which carries the per-widget
 facets (types, CSS classes, signals, actions). This file is the join table: one
-row per component, naming the upstream file, the `lib/*.rb` it becomes, its kind,
-and whether that file exists today.
+row per component, naming the upstream file, the `lib/*.rb` it becomes, its
+kind, and whether that file exists today.
 
 The unit is the file as the `component-identification` skill defines it — one
 upstream source file *together with* the `.ui` template it owns, against one
 `lib/paper_clip/*.rb`. Upstream splits nearly every component that way, so the
 `.ui` and the `.vala` are unioned before comparing.
+
+## Scan totals
+
+`scripts/component-scan.sh` over `origin/main`'s `src/` and over the port's
+`lib/`, with the shipped `symbols.tsv` as the classifier:
+
+| | Upstream `src/` | Port `lib/` |
+|---|---:|---:|
+| widget rows / instances | 95 / 140 | 65 / 74 |
+| distinct CSS classes | 14 | 11 |
+| signal rows | 16 | 19 |
+| action rows | 6 | 1 |
+| controller rows | 6 | 5 |
+
+The upstream instance count is inflated: a template child appears once in the
+`.vala` and again in the `.ui`, and both files are scanned. The port's CSS and
+action numbers are *under*-reported for the reasons the skill lists — the three
+classes the scan does not see on the port side (`document-view-drop`,
+`long-filename`, `overlay-drag-area`) are all present, two of them defined in
+`lib/paper_clip/style.rb` and applied from `document_view.rb` and
+`drop_overlay.rb`; and five of the six actions are built from variables
+(`application.rb:57-59`, `keyword_list.rb:30`, `password_dialog.rb:36`) rather
+than from literals the regex can match. Both were checked by reading. Nothing in
+the four scan streams is missing from the port.
 
 ## The inventory
 
@@ -37,8 +61,8 @@ inside it, then the dialogs.
 | 10 | `src/DropOverlay.vala` | `lib/paper_clip/drop_overlay.rb` | widget (drag-over tint) | yes |
 | 11 | `src/DocumentView.vala` + `src/gtk/document-view.ui` | `lib/paper_clip/document_view.rb` | page (the editor) | yes |
 | 12 | `src/DocumentView.vala` — `GtkShortcutController` | `lib/paper_clip/document_view.rb` | keyboard shortcuts (`<Ctrl>S`, `<Ctrl><Shift>S`) | yes |
-| 13 | **`src/DocumentThumbnail.vala`** | **`lib/paper_clip/document_thumbnail.rb`** | **widget (page-one preview)** | **no** |
-| 14 | **`src/Services/Thumbnailer.vala`** | **`lib/paper_clip/thumbnailer.rb`** | **service (off-thread renderer + cache)** | **no** |
+| 13 | `src/DocumentThumbnail.vala` | `lib/paper_clip/document_thumbnail.rb` | widget (page-one preview) | yes |
+| 14 | `src/Services/Thumbnailer.vala` | `lib/paper_clip/thumbnailer.rb` | service (off-thread renderer + cache) | yes |
 | 15 | `src/DetailsList.vala` + `src/gtk/details-list.ui` | `lib/paper_clip/details_list.rb` | widget (read-only property list) | yes |
 | 16 | `src/StringArrayRow.vala` (both classes) | `lib/paper_clip/string_array_row.rb` | row (`AdwExpanderRow` + `ContentRow`) | yes |
 | 17 | `src/DateRow.vala` + `src/gtk/date-row.ui` | `lib/paper_clip/date_row.rb` | row (date + calendar popover) | yes |
@@ -59,9 +83,24 @@ inside it, then the dialogs.
 | `src/Document.vala` | `lib/paper_clip/document.rb`, `pdf_strings.rb`, `pdf_crypt.rb`, `xmp_packet.rb` | model | yes |
 | `src/Services/DocumentManager.vala` | `lib/paper_clip/document_manager.rb` | service (dirty tracking) | yes |
 | `src/ThreadManager.vala` | `lib/paper_clip/thread_manager.rb` | service (worker) | yes |
-| `src/Models/AsyncTask.vala` | folded into the dialogs' callbacks | model | n/a |
+| `src/Models/AsyncTask.vala` | `lib/paper_clip/models.rb` + the dialogs' callbacks | model | yes |
 | `WindowState` enum (`src/window.vala`) | `lib/paper_clip/window_state.rb` | enum | yes |
 | `Intl.*` (`src/application.vala:30-32`) | `lib/paper_clip/translations.rb` | i18n binding | yes |
+| *(no counterpart — Vala's `--pkg poppler-glib`)* | `lib/paper_clip/poppler.rb` | binding (Poppler via GI typelib) | yes |
+| `data/…service.in` | `data/io.github.diegoivan.pdf_metadata_editor.service.in` | D-Bus activation | yes |
+
+### Signals upstream declares that the port expresses as callbacks
+
+Three upstream `signal` declarations have no `signal_connect` counterpart on the
+port side, by design: a Ruby class that is not a `GObject` subclass cannot
+register a custom signal, so the port passes procs instead and says so in the
+class comment.
+
+| Upstream signal | Port equivalent |
+|---|---|
+| `SaveChangesDialog.cancelled` / `done` | `on_response` proc (`save_changes_dialog.rb:42,57`) |
+| `KeywordRow.keyword_changed` | `on_edit` / `on_delete` procs (`keyword_row.rb:25,31-32`) |
+| `PasswordDialog.success` | kept as a real signal name on the dialog (`password_dialog.rb:36`) |
 
 ## Preferences
 
@@ -88,25 +127,25 @@ same empty schema under `data/`.
 
 ## Gaps to close
 
-1. **`src/DocumentThumbnail.vala` → `lib/paper_clip/document_thumbnail.rb`.**
-   The editor page's first child. `AdwBin` → `GtkImage` with `.icon-dropshadow`
-   at `pixel_size = MAX_SIZE / 2`, the page snapshotted over a white rectangle
-   with `NEAREST` / `TRILINEAR` filtering and AdwAvatar's scaling arithmetic.
-2. **`src/Services/Thumbnailer.vala` → `lib/paper_clip/thumbnailer.rb`.** The
-   singleton renderer behind it: Cairo ARGB32 render on `ThreadManager`, a
-   `$TMPDIR/thumbnails/<basename>.png` cache above the area budget, a
-   `Gdk::MemoryTexture` below it, and `ThumbnailError`. Blocked on
-   `Document#get_page_for_index`, which the port's PDF reader does not provide —
-   the port parses the Info dictionary rather than rendering pages.
-3. **`data/io.github.diegoivan.pdf_metadata_editor.service.in`** is not a
-   user-facing component, but it is the D-Bus activation file, and nothing in
-   `data/` or `flake.nix` installs one. Noted here so it is not lost.
+None at file level. The two gaps this report opened with — `DocumentThumbnail`
+and `Services/Thumbnailer` — were closed by *Port the page-one thumbnail, its
+renderer, and D-Bus activation*, which also added the `.service.in` the earlier
+revision flagged as unowned. Every upstream user-facing component now has a
+`lib/paper_clip/*.rb` behind it.
+
+What remains is not inventory work:
+
+1. **Widget-level parity** — whether each present component carries the same
+   types, CSS classes and signals as its upstream counterpart. That is
+   `component-parity`'s job; see `.reports/component-parity.md`.
+2. **Behaviour under a display** — the "exists" column means *a port file covers
+   that component*, not *that component was seen on screen*. See
+   `.reports/drive-run.md`.
 
 ## Method and its limits
 
-Every facet above is read from source: upstream with
-`git show origin/main:<path>`, the port by reading `lib/`. Nothing was observed
-in a running app, so the "exists" column means *a port file covers that
-component*, not *that component was seen on screen*. Widget-level parity —
-whether the port's version of a present component carries the same CSS classes
-and signals — is `component-parity`'s job, not this file's.
+Every facet above is read from source: upstream with `git show origin/main:<path>`
+(the tree exported to a scratch dir for the scan; never checked out), the port by
+reading `lib/`. The scan is `component-identification`'s
+`scripts/component-scan.sh` with the shipped `symbols.tsv`; every row it struck
+or missed was decided by opening the file, as the skill requires.
