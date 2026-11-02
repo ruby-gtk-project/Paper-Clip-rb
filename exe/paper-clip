@@ -3,4 +3,4 @@
 
 require "paper_clip"
 
-PaperClip::Application.new.build.run
+PaperClip::Main.run
