@@ -1,167 +1,220 @@
 # Porting — Paper-Clip-rb
 
-The enumerated unit list, the file map, and the cursor. Upstream is
-`origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0`; read it with
-`git show origin/main:<path>`. It is never checked out and never merged — it
-is the spec.
+Resume point for the next run. Factual status only; the reasoning and the
+cost-to-the-user write-ups live in `.reports/`, `COMPONENT_PARITY.md`,
+`TEST_PARITY.md` and `FINDINGS.md`.
 
-Parity evidence lives in `COMPONENT_PARITY.md` and `TEST_PARITY.md`. Costs and
-open questions live in `FINDINGS.md`. This file is the map and the cursor and
-nothing else.
+## Upstream
 
-## Cursor
+Paper Clip is a GNOME utility that opens a single PDF and lets you view and
+edit its metadata — title, author, creation software, subject, conversion
+software, creation/modification dates and keywords — writing the changes back
+to the original file or to a new one, with the non-editable PDF properties
+listed read-only beside a page-one thumbnail.
 
-| | |
-|---|---|
-| Round | 2 complete |
-| Units with a port file | **19 of 21** |
-| Units with no port file | 2 — `DocumentThumbnail`, `Thumbnailer` (`FINDINGS.md` §1) |
-| Port specs | 130 examples, 0 failures |
-| Units driven on screen | **0** (`FINDINGS.md` §8) |
+Implemented in Vala: GTK4 + libadwaita 1.x, GtkBuilder `.ui` templates,
+Poppler for PDF, Exempi for XMP.
 
-Round 3's first task is `FINDINGS.md` §8: get a display into the devShell and
-drive every unit. Everything else in this port is a reading, not a result.
+The spec lives on the `origin/main` ref in this same repo, at
+`c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28). Read it with
+`git show origin/main:<path>` and `git ls-tree -r --name-only origin/main`.
+It is never checked out and never merged.
 
-## The file map
+## Done
 
-One upstream source file maps to one `lib/paper_clip/<thing>.rb`. Upstream's
-`.ui` templates have no separate port file: a GtkBuilder template and the
-class that drives it become one declarative Ruby class, so
-`src/DateRow.vala` + `src/gtk/date-row.ui` → `lib/paper_clip/date_row.rb`.
+Implemented and believed complete. "Believed" is load-bearing: no unit in
+this column has been observed running — see **Open gaps**, gap 5.
+
+One upstream source file maps to one `lib/paper_clip/<thing>.rb`. A
+GtkBuilder template and the class that drives it become one declarative Ruby
+class, so upstream's `.ui` files have no port file of their own.
 
 ### Widgets
 
-| Upstream | Port |
+| Port | Upstream |
 |---|---|
-| `src/window.vala` + `src/window.ui` | `lib/paper_clip/window.rb` |
-| `src/window.ui` `<menu id="primary_menu">` | `lib/paper_clip/primary_menu.rb` |
-| the `WindowState` enum at the foot of `src/window.vala` | `lib/paper_clip/window_state.rb` |
-| `src/DocumentView.vala` + `src/gtk/document-view.ui` | `lib/paper_clip/document_view.rb` |
-| `src/DateRow.vala` + `src/gtk/date-row.ui` | `lib/paper_clip/date_row.rb` |
-| `src/DetailsList.vala` + `src/gtk/details-list.ui` | `lib/paper_clip/details_list.rb` |
-| `src/StringArrayRow.vala` (both classes) | `lib/paper_clip/string_array_row.rb` |
-| `src/KeywordList.vala` + `src/gtk/keyword-list.ui` | `lib/paper_clip/keyword_list.rb` |
-| `src/KeywordRow.vala` | `lib/paper_clip/keyword_row.rb` |
-| `src/DropOverlay.vala` | `lib/paper_clip/drop_overlay.rb` |
-| `src/SaveChangesDialog.vala` + `src/gtk/save-changes-dialog.ui` | `lib/paper_clip/save_changes_dialog.rb` |
-| `PaperClip.DocumentRow`, at the foot of the same file | `lib/paper_clip/document_row.rb` |
-| `src/PasswordDialog.vala` + `src/gtk/password-dialog.ui` | `lib/paper_clip/password_dialog.rb` |
-| `src/gtk/shortcut-window.ui` | `lib/paper_clip/shortcuts_dialog.rb` |
-| `src/DocumentThumbnail.vala` | **no port file** |
+| `lib/paper_clip/window.rb` | `src/window.vala` + `src/window.ui` |
+| `lib/paper_clip/window_state.rb` | the `WindowState` enum at the foot of `src/window.vala` |
+| `lib/paper_clip/primary_menu.rb` | `src/window.ui` `<menu id="primary_menu">` |
+| `lib/paper_clip/document_view.rb` | `src/DocumentView.vala` + `src/gtk/document-view.ui` |
+| `lib/paper_clip/date_row.rb` | `src/DateRow.vala` + `src/gtk/date-row.ui` |
+| `lib/paper_clip/details_list.rb` | `src/DetailsList.vala` + `src/gtk/details-list.ui` |
+| `lib/paper_clip/string_array_row.rb` | `src/StringArrayRow.vala` (both classes) |
+| `lib/paper_clip/keyword_list.rb` | `src/KeywordList.vala` + `src/gtk/keyword-list.ui` |
+| `lib/paper_clip/keyword_row.rb` | `src/KeywordRow.vala` |
+| `lib/paper_clip/drop_overlay.rb` | `src/DropOverlay.vala` |
+| `lib/paper_clip/save_changes_dialog.rb` | `src/SaveChangesDialog.vala` + `src/gtk/save-changes-dialog.ui` |
+| `lib/paper_clip/document_row.rb` | `PaperClip.DocumentRow`, foot of `src/SaveChangesDialog.vala` |
+| `lib/paper_clip/password_dialog.rb` | `src/PasswordDialog.vala` + `src/gtk/password-dialog.ui` |
+| `lib/paper_clip/shortcuts_dialog.rb` | `src/gtk/shortcut-window.ui` |
 
 ### Application and services
 
-| Upstream | Port |
+| Port | Upstream |
 |---|---|
-| `src/application.vala` (actions, lifecycle, startup) | `lib/paper_clip/application.rb` |
-| `src/application.vala` `on_about_action` + `generate_debug_info` | `lib/paper_clip/about_dialog.rb` |
-| `src/application.vala:28-30` (the three `Intl` calls) | `lib/paper_clip/translations.rb` |
-| `src/main.vala` + the `OptionEntry[]` table | `lib/paper_clip/main.rb` |
-| `src/Document.vala` (model, parse, save) | `lib/paper_clip/document.rb` |
-| the string tables inside `src/Document.vala` | `lib/paper_clip/pdf_strings.rb` |
-| `src/Document.vala:227-270` (Exempi) | `lib/paper_clip/xmp_packet.rb` |
-| Poppler's own security handler, which upstream never writes | `lib/paper_clip/pdf_crypt.rb` |
-| `src/Services/DocumentManager.vala` | `lib/paper_clip/document_manager.rb` |
-| `src/ThreadManager.vala` | `lib/paper_clip/thread_manager.rb` |
-| `src/style.css` | `lib/paper_clip/style.rb` |
-| `src/Models/AsyncTask.vala` | folded into `password_dialog.rb` — see below |
-| `src/Services/Thumbnailer.vala` | **no port file** |
+| `lib/paper_clip/application.rb` | `src/application.vala` (actions, lifecycle, startup) |
+| `lib/paper_clip/about_dialog.rb` | `src/application.vala` `on_about_action` + `generate_debug_info` |
+| `lib/paper_clip/translations.rb` | the three `Intl` calls in `src/application.vala` |
+| `lib/paper_clip/main.rb` | `src/main.vala` + the `OptionEntry[]` table |
+| `lib/paper_clip/document.rb` | `src/Document.vala` (model, parse, save) |
+| `lib/paper_clip/pdf_strings.rb` | the string tables inside `src/Document.vala` |
+| `lib/paper_clip/xmp_packet.rb` | `src/Document.vala:227-270` (the Exempi block) |
+| `lib/paper_clip/pdf_crypt.rb` | Poppler's own security handler, which upstream never writes itself |
+| `lib/paper_clip/document_manager.rb` | `src/Services/DocumentManager.vala` |
+| `lib/paper_clip/thread_manager.rb` | `src/ThreadManager.vala` |
+| `lib/paper_clip/style.rb` | `src/style.css` |
+| folded into `password_dialog.rb` (`on_password:` / `on_cancel:`) | `src/Models/AsyncTask.vala` |
 
 ### Data
 
-| Upstream | Port |
+| Port | Upstream |
 |---|---|
-| `data/*.desktop.in` | `data/io.github.diegoivan.pdf_metadata_editor.desktop.in` |
-| `data/*.metainfo.xml.in` | `data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in` |
-| `data/*.gschema.xml` | `data/io.github.diegoivan.pdf_metadata_editor.gschema.xml` |
-| `data/icons/hicolor/**` | `data/icons/hicolor/**` (plus `index.theme`) |
-| `src/gtk/*.svg` (five bundled symbolic icons, in the gresource) | `data/icons/hicolor/scalable/actions/*.svg` |
-| `data/nautilus-extension/paper-clip.py` | `data/nautilus-extension/paper-clip.py` |
+| `data/io.github.diegoivan.pdf_metadata_editor.desktop.in` | same path |
+| `data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in` | same path |
+| `data/io.github.diegoivan.pdf_metadata_editor.gschema.xml` | same path (empty of keys both sides) |
+| `data/icons/hicolor/**` (plus `index.theme`) | `data/icons/hicolor/**` |
+| `data/icons/hicolor/scalable/actions/*.svg` | the five symbolic icons in `src/pdf-metadata-editor.gresource.xml` |
+| `data/nautilus-extension/paper-clip.py` | same path, carried as upstream's Python with the `Exec` path repointed |
 | `po/**` | `po/**`, carried over unchanged except `POTFILES` |
-| `data/*.service.in` | **no port file** — D-Bus activation |
-| `src/pdf-metadata-editor.gresource.xml` | no counterpart: a Ruby port has no gresource. The icons are a filesystem icon theme instead, registered by `Application#register_icons` |
+| no counterpart by design | `src/pdf-metadata-editor.gresource.xml` — a Ruby port has no gresource; the icons are a filesystem icon theme registered by `Application#register_icons` |
 
 ### Entry points
 
-- `exe/paper-clip` → `require "paper_clip"` → `PaperClip::Main.run`. This is
-  the GUI path and it loads `gtk4`.
-- `lib/paper/clip/rb.rb` → `lib/paper_clip/models.rb`. This is the gem's
-  library path, which the spec suite loads; it stops short of the widget
-  toolkit so it works with no display. See `FINDINGS.md` §9.
+- `exe/paper-clip` → `require "paper_clip"` → `PaperClip::Main.run`. GUI path;
+  loads `gtk4`.
+- `lib/paper/clip/rb.rb` → `lib/paper_clip/models.rb`. Gem library path, which
+  the spec suite loads; stops short of the widget toolkit so it runs with no
+  display.
 
-## Deliberate structural correspondences
+### Port-side tests
 
-Each of these is a shape change, not a behaviour change, and each is recorded
-in `COMPONENT_PARITY.md` with its reason.
+130 examples, 0 failures, by `nix develop --command rspec --no-color -f progress`
+at the last audit. They cover the date parser, the keyword round-trip, the
+`/Encrypt /P` bit map, the incremental-update writer, the security handler
+across four revisions, the XMP mirror and the dirty flag. No widget test of
+any kind: nothing in `spec/` constructs an `Adwaita::` object.
 
-| Upstream shape | Port shape | Why |
-|---|---|---|
-| `Adw.Application` | `Gtk::Application` + `Adwaita.init` | `Adwaita::Application` is broken in these bindings |
-| `Adw.MessageDialog` | `Adwaita::AlertDialog` | deprecated in libadwaita 1.6 |
-| `Gtk.ShortcutsWindow` | `Adwaita::ShortcutsDialog` | deprecated in GTK 4.18 |
-| `async` methods suspending on an `AsyncTask` | explicit callbacks | Ruby has no coroutine to resume, which is why `src/Models/AsyncTask.vala` has no file of its own: the two outcomes it existed to carry are `on_password:` and `on_cancel:` in `PasswordDialog#ask` |
-| `BindingGroup` with `SYNC_CREATE \| BIDIRECTIONAL` | `update` pushes, `notify::text` pulls, behind a `@loading` guard | the Document is plain Ruby and has no GObject properties to bind |
-| `ListStore` of `StringObject` + `items-changed` | plain Array + `Document#on_keywords_changed(position, removed, added)` | same three arguments, same semantics: it fires on add and remove and stays silent on an edit |
-| a GtkBuilder template plus its class | one declarative Ruby class | the house style; see `.claude/skills/ruby-gtk` |
+## Not started
 
-## House style
+Upstream components with no Ruby counterpart:
 
-Every file: `# frozen_string_literal: true`, then `require 'adwaita'` (or
-`'glib2'`/`'gio2'` where no widget is touched), then `require_relative` for
-siblings. Every class carries a comment naming the upstream file it came from
-and anything worth knowing. Widgets are memoized accessors configured in
-`.tap` blocks and assembled in one `build`. `.rubocop.yml` plus the custom
-cops in `cops/` are enforced: no `return`, no modifier `if`, no conditional
-assignment, `tap` where it applies.
+| Upstream | Note |
+|---|---|
+| `src/DocumentThumbnail.vala` | the editor page's first child; see Blockers 1 and 3 |
+| `src/Services/Thumbnailer.vala` | off-loop render, `$TMPDIR/thumbnails` cache, `ThumbnailError`; see Blocker 1 |
+| `data/io.github.diegoivan.pdf_metadata_editor.service.in` | D-Bus activation; not blocked by anything, just not written |
 
-## Round log
+Upstream's three meson validation tests (`desktop-file-validate`,
+`appstreamcli validate`, `glib-compile-schemas --strict --dry-run`) have no
+port equivalent in the Rakefile or `spec/`.
 
-**Round 1** — the window, the editor page, the two dialogs it had, the primary
-menu, the drop overlay, the details and keyword lists, and a pure-Ruby PDF
-parser and incremental-update writer. No translations, no tests, no data
-directory, no password dialog, no thumbnail.
+## Open gaps
 
-**Round 2** — closed, with evidence:
+13 gaps across the four parity reports in `.reports/`, and clean=false.
 
-- `PasswordDialog`, and the standard security handler under it, so an
-  encrypted PDF opens (`/R` 2 to 6, user and owner passwords, re-encrypted on
-  save);
-- `cached_file`: the original is copied into `$TMPDIR/copies` and the copy is
-  what gets parsed, mutated and written out, so a failed save cannot damage
-  the only copy a user has;
-- the XMP write-back, for files that carry a packet;
-- the window title follows `document.title` and tracks edits to it;
-- `Window#save_selected` saves the managers the dialog returned;
-- the page-count row hides when the count is zero;
-- upstream's five bundled symbolic icons and the hicolor application icons,
-  installed and registered, with upstream's icon names back in `date_row.rb`
-  and `keyword_row.rb`;
-- `Adw.TimedAnimation` at 200 ms `EASE_IN_OUT_SINE`, in place of ten linear
-  `GLib::Timeout` ticks;
-- the `document-view-drop` class, the `editor` action group,
-  `accessible-role=presentation` on the welcome icon;
-- the keyword list's items-changed subscription, its zero-to-one focus branch,
-  and row-level editing instead of a full rebuild on delete;
-- `DateRow` keeps the recorded time of day when a calendar day is picked;
-- `--help` documents both flags;
-- the whole translation layer: `po/` from upstream, the `gettext` gem, the
-  domain bound at startup, 96 keys marked, the ten shortcut strings with
-  `msgctxt "shortcut window"`, `translator_credits`, and `.mo` per language
-  compiled and installed by the flake;
-- the desktop entry, the AppStream metainfo, the GSettings schema and the
-  Nautilus extension, with `msgfmt --desktop` and `--xml` merging the
-  translations at install;
-- the port's own spec suite: 130 examples over the date parser, the keyword
-  round-trip, the `/Encrypt /P` bit map, the incremental-update writer, the
-  security handler against four revisions, the XMP mirror and the dirty flag;
-- eight excuse-shaped class comments rewritten, and the eight constructions
-  that slipped past the scanner added to its pattern list.
+From `.reports/component-parity.md` (5):
 
-**Still open after round 2**, in the order round 3 should take them:
+1. The page-one preview does not exist. `document_view.rb:95` makes the
+   filename label the box's first child where upstream places
+   `PaperClipDocumentThumbnail`. The largest gap in the port.
+2. `Services/Thumbnailer` has no counterpart at all, so upstream's
+   degrade-on-huge-page path and its `FAILED_EXPORT` / `FAILED_TO_CACHE`
+   reporting have nowhere to live.
+3. No D-Bus service file, so nothing can start the app by its bus name.
+4. The About dialog's debug block cannot name the PDF or XMP library;
+   `about_dialog.rb:66-67` prints two sentences saying neither is linked where
+   upstream prints Poppler and Exempi versions.
+5. Nothing on the port side has been confirmed to render or fire. There is no
+   display and no X server in the closure or on the host; `require "adwaita"`
+   raises `Gtk::InitError`. Every parity verdict in the reports is a reading
+   of source. In particular `window.rb:151` builds an
+   `Adwaita::ApplicationWindow`, which the `ruby-gtk` skill records as broken
+   in these bindings — if the skill is right the window does not open and the
+   other verdicts are moot. Remedy is a one-line `flake.nix` change
+   (`pkgs.xvfb-run`), then drive and screenshot each unit.
 
-1. Drive and screenshot every unit (`FINDINGS.md` §8). Blocked on a display,
-   which is a one-line flake change.
-2. `DocumentThumbnail` + `Thumbnailer` (`FINDINGS.md` §1).
+From `.reports/component-identification.md` (3): `DocumentThumbnail` and
+`Thumbnailer` have no port unit; `*.service.in` has no port unit. (These
+overlap gaps 1–3 above as identification-level findings and are counted
+separately by that report.)
+
+From `.reports/test-parity.md` (3): all three upstream meson validation tests
+are unported.
+
+From `.reports/translation-parity.md` (2): `po/pdf-metadata-editor.pot` was
+overwritten and the replacement drops 5 of the 96 keys; a gem-installed Paper
+Clip is untranslated in all 18 languages because the `.mo` files are compiled
+and installed only by the flake.
+
+`.reports/accountability-ensurance.md` reports 0 scanner hits in `lib/`,
+`exe/` and `spec/`, and 4 findings in what the code *says* about its gaps.
+
+## Blockers
+
+1. **Poppler has no Ruby binding in the gtk4-era ruby-gnome family.** Every
+   metadata read/write, `n_pages`, the permission and viewer-preference flags,
+   the layout/duplex/subtype enums and the page render go through
+   libpoppler-glib. The old `poppler` gem is GTK2/Cairo-era. Options: load the
+   Poppler-0.18 typelib through gobject-introspection, or shell out to
+   `exiftool`/`qpdf`. Gates `document.rb`, `details_list.rb`,
+   `document_thumbnail.rb` and `thumbnailer.rb`. Worked around for the
+   metadata half by the port's own pure-Ruby PDF parser/writer
+   (`document.rb`, `pdf_strings.rb`, `pdf_crypt.rb`); not worked around for
+   rendering, which is why the thumbnail is absent.
+2. **Exempi (XMP) has no Ruby binding and no introspection data** — upstream
+   ships its own `vapi/exempi-2.0.vapi`. `Document.save_xmp` and `has_xmp`
+   (producer, creator tool, keywords, `dc:title`, CreateDate, ModifyDate,
+   MetadataDate) cannot be ported as written; it needs an FFI binding to
+   libexempi or an exiftool shell-out. Worked around by
+   `lib/paper_clip/xmp_packet.rb`, which rewrites the packet in Ruby for files
+   that carry one. `Xmp.init`/`terminate` have nothing to call.
+3. **`DocumentThumbnail`'s `Gtk.Snapshot` scaling** (`append_color`,
+   `append_scaled_texture` with a `Graphene.Rect`, `to_paintable`,
+   `Gsk.ScalingFilter`) is a thin GSK wrapper whose availability in the Ruby
+   bindings is unverified. Fallback is GdkPixbuf scaling plus a Cairo white
+   background, which loses the filter choice.
+4. **`Adw.MessageDialog`**, which `SaveChangesDialog` subclasses, is
+   deprecated in libadwaita 1.6, and the Ruby binding for the `<responses>`
+   block with per-response appearance is unverified. Rebuilt on
+   `Adwaita::AlertDialog` with responses added in code.
+5. **`GLib.BindingGroup` and `bind_property` with `BIDIRECTIONAL|SYNC_CREATE`**
+   are the spine of `DocumentView`, `KeywordRow` and `DocumentRow`. GObject
+   property binding is not usefully exposed in the Ruby bindings, so all of it
+   became explicit `notify::` handlers behind a `@loading` re-entrancy guard.
+   Portable, but the largest rewrite in the port and the easiest place to
+   introduce an edit loop. Unobserved, per gap 5.
+6. **`data/nautilus-extension/paper-clip.py` cannot be ported.** A Nautilus
+   extension must be a Python or C GObject plugin loaded into the Nautilus
+   process; Ruby is not a supported extension language. The file stays as
+   upstream's Python with its `Exec` path repointed.
+7. **`Adwaita::Application` and `Adwaita::ApplicationWindow` are broken in the
+   Ruby bindings**, so the port cannot subclass the application as upstream
+   does (`Adw.Application` with activate/startup/shutdown/open/
+   handle_local_options overrides). It uses `Gtk::Application` plus
+   `Adwaita.init`, connects signals, and parses ARGV itself. Note the
+   inconsistency recorded in gap 5: the window class is still
+   `Adwaita::ApplicationWindow`.
+8. **`GtkShortcutsWindow`** (`src/gtk/shortcut-window.ui`) is deprecated in
+   GTK 4.18, so the shortcuts window was rebuilt as an
+   `Adwaita::ShortcutsDialog` following the pilot's `lib/shortcuts_dialog.rb`
+   rather than ported literally. The section's `max-height = 10` has no
+   Adwaita counterpart.
+9. **The GSettings schema `data/io.github.diegoivan.pdf_metadata_editor.gschema.xml`
+   is empty** (no keys), so there is no preferences component and no
+   `settings.rb` to port. Anything resembling one would be invention, not
+   parity.
+
+## Next run
+
+In order:
+
+1. Settle gap 5. Add `pkgs.xvfb-run` to the devShell, then instantiate
+   `Application` and `Window` and find out whether
+   `Adwaita::ApplicationWindow` works at all. Everything else in this port is
+   a reading, not a result, until this runs.
+2. `DocumentThumbnail` + `Thumbnailer` (Blockers 1 and 3).
 3. The three widget-level guards `TEST_PARITY.md` lists as owed, which need
    (1) first.
-4. `data/*.service.in`, for D-Bus activation.
+4. `data/*.service.in`.
+5. Restore the 5 dropped `.pot` keys; install the `.mo` files from the gem as
+   well as from the flake.
