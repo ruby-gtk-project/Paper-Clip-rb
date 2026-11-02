@@ -59,6 +59,13 @@ module PaperClip
       'new-window' => ['<Control>n'],
     }.freeze
 
+    # The Window objects this application has opened, newest last. Upstream
+    # reads the same list back off the GtkApplication's own window list
+    # (src/application.vala:160); here the port's Window wrappers are what
+    # the quit path and the harness need, and GtkApplication only knows
+    # about the Adwaita::ApplicationWindow inside each one.
+    attr_reader :windows
+
     def initialize(app_id: APP_ID, flags: :handles_open)
       @app_id = app_id
       @flags = flags
@@ -70,6 +77,7 @@ module PaperClip
         a.signal_connect('startup') { on_startup }
         a.signal_connect('activate') { on_activate }
         a.signal_connect('open') { |_, files, _hint| on_open(files) }
+        a.signal_connect('window-removed') { |_, toplevel| forget_window(toplevel) }
 
         setup_actions
       end
@@ -175,7 +183,25 @@ module PaperClip
         Window.new(app).tap do |window|
           @windows << window
           window.build
-          window.window.signal_connect('destroy') { @windows.delete(window) }
+        end
+      end
+
+      # window-removed and not the window's own 'destroy': GtkWidget emits
+      # destroy from dispose, and dispose only runs when the last reference
+      # goes — which it never does here, because the port's Window holds its
+      # widget in an instance variable for the lifetime of the object. A
+      # closed window therefore stayed in this list forever, and the quit
+      # path went on offering to save the document of a window the user had
+      # already closed.
+      #
+      # gtk_window_destroy calls gtk_application_remove_window on its way
+      # out, so this fires exactly once per window that goes, reference
+      # counting or not.
+      def forget_window(toplevel)
+        window_for(toplevel).then do |window|
+          if window
+            @windows.delete(window)
+          end
         end
       end
 

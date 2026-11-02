@@ -67,7 +67,12 @@ module PaperClip
     # (src/window.vala:254 and :286).
     ANIMATION_DURATION = 200
 
-    attr_reader :document_manager
+    # last_toast is the one toast this window ever shows — the incorrect
+    # password one (src/window.vala:175). AdwToastOverlay has no reader for
+    # what it is showing, so without this the only toast the port raises is
+    # unobservable from outside and the drive harness cannot tell a shown
+    # toast from a swallowed one.
+    attr_reader :document_manager, :last_toast
 
     def initialize(app)
       @app = app
@@ -349,15 +354,37 @@ module PaperClip
       # Upstream checks the content type before accepting a drop, so dragging
       # a text file onto the window is refused rather than failing later. The
       # refusal is a log line and no UI, as src/window.vala:92 is.
-      def on_file_dropped(file)
-        if pdf?(file)
-          @dropped_file = file
-          @state = WindowState::OPENING_DROPPED
-          open_dropped_file
-          true
+      def on_file_dropped(value)
+        dropped_file(value).then do |file|
+          if pdf?(file)
+            @dropped_file = file
+            @state = WindowState::OPENING_DROPPED
+            open_dropped_file
+            true
+          else
+            warn('File is not a PDF')
+            false
+          end
+        end
+      end
+
+      # GtkDropTarget's "drop" signal carries a GValue, not the object inside
+      # it: the C signature is `gboolean drop (GtkDropTarget *, const GValue
+      # *value, double x, double y)`, and these bindings hand that GValue
+      # straight over as a GLib::Value rather than unboxing it. Reading
+      # `.value` is what turns it back into the Gio::File the target was
+      # created for.
+      #
+      # Without this every drop raised NoMethodError inside `pdf?` —
+      # `undefined method 'query_info' for an instance of GLib::Value` — and
+      # because the raise travelled back out through GTK's own signal
+      # emission it took the process down with it. Drag and drop, which is
+      # the whole of upstream's welcome page, had never worked.
+      def dropped_file(value)
+        if value.is_a?(GLib::Value)
+          value.value
         else
-          warn('File is not a PDF')
-          false
+          value
         end
       end
 
@@ -438,7 +465,10 @@ module PaperClip
       end
 
       def add_toast(message)
-        toast_overlay.add_toast(Adwaita::Toast.new(message))
+        Adwaita::Toast.new(message).tap do |toast|
+          @last_toast = toast
+          toast_overlay.add_toast(toast)
+        end
       end
 
       # --- Saving -----------------------------------------------------------
