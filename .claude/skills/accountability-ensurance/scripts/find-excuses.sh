@@ -45,13 +45,6 @@ upstream (does|has) this too|upstream.s own todo	upstream's debt is not your lic
 (not ported|unported)\b	honest but toothless - name the behaviour and owe it
 (^|[-*][[:space:]]*)(NOT IMPLEMENTED|TODO|FIXME|Known limitation|Caveat):	a status field - reads as filed, and filed reads as approved
 (this|it) (was|is) not (implemented|built|ported)	passive voice - no author, so no one to hold to it
-one (deliberate|conscious|considered) (difference|divergence|departure|change)	counts the subtractions as though counting them were deciding them
-is absent: it needs|is missing because it needs|absent: (it|this) (needs|requires)	names the dependency in the sentence that names the gap, so the gap reads as a consequence
-(are|is|were|was) left out	a subtraction in the passive voice, usually followed by what was added instead
-rather than (opening|showing|rendering|loading|building)	turns a missing path into the safer of two options, which nobody chose
-(the )?(stock|standard|system) (icon|widget|dialog) of the same (shape|kind|sort)	asserts a visual equivalence nobody has screenshotted
-which is what every (reader|client|viewer|consumer) (displays|shows|reads|uses)	a reason offered inside the sentence that describes the gap
-(neither|none of the) (librar|binding|gem)\w* (has|have|is|are) .{0,24}available	the environment named as the premise a whole file rests on
 PAT
 )
 
