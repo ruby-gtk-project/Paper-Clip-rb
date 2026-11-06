@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
-| Port | `ruby` @ `3800624` |
+| Port | `ruby` @ `1ce848a` (re-verified; previous round was `3800624`) |
 | Widget units compared | 15 → 15 |
 | Widget units with no port file | **0** |
 | Units at parity on all four axes | **15** |
@@ -288,3 +288,47 @@ look exactly as it does.
   differently.
 - The three gaps are gaps. None is lowered to a note, and none is excused by
   a binding limitation.
+
+## Re-verification — round 4, `ruby` @ `1ce848a`
+
+Re-ran both suites from a clean shell for this round:
+
+```
+$ nix develop --command rspec --no-color -f progress
+134 examples, 0 failures
+
+$ nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb
+278 of 278 checks passed
+DRIVE OK
+```
+
+The three commits since the last round that touch `lib/` (`8052786`, folded
+into `1ce848a`'s history) change `Document#save`, `DocumentManager#save` and
+`Window#action_save`/`#action_save_as` to pass a `Gio::File` through to
+`replace_contents` instead of handing `File.binwrite` a bare path string —
+`document.path` → `document.original_file`. This is inside the **save-changes
+dialog** unit's territory, so it was re-read and re-driven specifically:
+
+- `save_changes_dialog.rb` and `document_row.rb` themselves are unchanged —
+  the edit is one layer down, in what `Window#action_save`/`#save_to` hands
+  the document manager.
+- Steps 72–84 of the driver (an unsaved edit, `win.open` raising the dialog,
+  cancel losing nothing, close answered with Save) are unaffected in
+  behaviour and still pass; they exercise `save_to` end to end, so the
+  `Gio::File` path is what actually ran.
+- No widget, CSS class, signal or action in this unit's row changed. The
+  **save-changes dialog** unit stays at parity.
+
+All three gaps below were re-checked against the current tree and are
+unchanged:
+
+- **Gap 1** (no `COPYING`): `ls COPYING` at the root — nothing.
+- **Gap 2** (Exempi line): `about_dialog.rb:68` still reads `Exempi: not
+  linked — this port edits the XMP packet as XML`.
+- **Gap 3** (thumbnail unexercised): `spec/support/pdf_fixtures.rb:41,53`
+  still build `MediaBox [0 0 200 200]` pages with no `/Contents`; `grep -rn
+  thumbnails test/ spec/ lib/` still returns only the constant at
+  `thumbnailer.rb:53`.
+
+No unit regressed and none newly reached parity this round — the only code
+movement was a correctness fix below the widget layer.

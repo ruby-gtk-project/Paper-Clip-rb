@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
-| Port | `ruby` @ `3800624` |
+| Port | `ruby` @ `1ce848a` (re-verified; previous round was `3800624`) |
 | Upstream tests | **3** |
 | Ported | **0** |
 | Gaps | **3** |
@@ -167,3 +167,41 @@ driven when they are not.
   commands run for this audit, quoted as numbers rather than as adjectives.
 - Where the port's own documents claim coverage that no executable artifact
   provides, this document says so rather than repeating the claim.
+
+## Re-verification — round 4, `ruby` @ `1ce848a`
+
+Both suites re-run from a clean shell for this round, not quoted from a
+previous log:
+
+```
+$ nix develop --command rspec --no-color -f progress
+134 examples, 0 failures   (seed 42392)
+
+$ nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb
+278 of 278 checks passed
+DRIVE OK
+```
+
+Still **3/3 upstream tests unported, 0 ported.** The root ledger has not
+closed the gap this skill found last round and has not corrected the count:
+
+```
+$ sed -n '7,9p' TEST_PARITY.md
+| Upstream tests | **0** |
+| Ported | 0 |
+| Gaps | 0 |
+```
+
+Four days and six commits have passed since `.reports/test-parity.md` first
+corrected this to 3, and the root `TEST_PARITY.md` — the document the skill
+calls the contract — still reads 0/0/0. This is carried forward into
+`accountability-ensurance.md` as Finding 2, unchanged, because the correction
+that would close it has still not been made where it needs to be made: in the
+root ledger, not in `.reports/`.
+
+No `desktop-file-validate` / `appstreamcli validate` / `glib-compile-schemas
+--strict --dry-run` check has been added anywhere in the tree since last
+round (`grep -rniE 'desktop-file-validate|appstreamcli|glib-compile-schemas
+--strict' Rakefile flake.nix .gitlab-ci.yml spec/ test/ .github/ nix/` still
+returns only the one non-strict compile in `flake.nix:235`). All three gaps
+in the table above stand unchanged.

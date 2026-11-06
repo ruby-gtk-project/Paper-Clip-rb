@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
-| Port | `ruby` @ `3800624` |
+| Port | `ruby` @ `1ce848a` (re-verified; previous round was `3800624`) |
 | Upstream widget units | **15** |
 | Port widget units | **15** |
 | Widget units with no port counterpart | **0** |
@@ -156,3 +156,24 @@ Singleton; `create_thumbnail(page, basename)` renders a Cairo ARGB32 surface on 
   `DocumentView` are built from a table in a loop
   (`details_list.rb:67`, `document_view.rb:36`), which the scan reports as
   one row each. Counted at the call sites: seven and five.
+
+## Re-verification — round 4, `ruby` @ `1ce848a`
+
+Four commits landed between the previous census and this one
+(`68ebeda`, `b292c1c`, `8ef5c25`, `8052786`, `1ce848a`). None of them touch a
+widget file: they package the gem (`68ebeda`), merge a scaffold sync
+(`8ef5c25`), and fix `Document#save`/`DocumentManager#save`/`Window` to pass a
+`Gio::File` through to `replace_contents` instead of a bare path
+(`8052786`) — a correctness fix with no widget, CSS, signal or action
+surface. `git diff 73a0b7e..1ce848a -- lib/ exe/` touches only
+`document.rb`, `document_manager.rb` and `window.rb`'s saving methods.
+
+Re-checked by hand, not just re-read:
+
+- `ls COPYING *.doap *.json` at the repo root — still nothing for any of the
+  three. The three identification-level gaps stand unchanged.
+- `nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb` re-run for
+  this round: **278 of 278 checks passed, `DRIVE OK`**.
+- `nix develop --command rspec` re-run: **134 examples, 0 failures**.
+
+The inventory above is unchanged and current as of `1ce848a`.

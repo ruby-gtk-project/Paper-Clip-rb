@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` @ `3800624` |
+| Port | `ruby` @ `1ce848a` (re-verified; previous round was `3800624`) |
 | Scanner hits in `lib/` | **0** |
 | Scanner hits in `exe/` | **0** |
 | Scanner hits in `test/` | **0** |
@@ -261,3 +261,94 @@ No work is hidden behind a label and no gap is presented as settled
 architecture. But three green rows are standing on `/tmp`, and that is a worse
 position than an honest gap, because an honest gap gets closed and a false
 green gets inherited.
+
+## Re-verification — round 4, `ruby` @ `1ce848a`
+
+Re-ran the scan and re-checked every finding against the current tree.
+
+```sh
+$ .claude/skills/accountability-ensurance/scripts/find-excuses.sh lib   -> 0 hits
+$ .claude/skills/accountability-ensurance/scripts/find-excuses.sh exe   -> 0 hits
+$ .claude/skills/accountability-ensurance/scripts/find-excuses.sh test  -> 0 hits
+$ .claude/skills/accountability-ensurance/scripts/find-excuses.sh spec  -> 0 hits
+$ grep -rniE 'TODO|FIXME|not implemented|for now|in a future' lib/ exe/ -> 0
+```
+
+Code stays clean. Findings 1–5 were each re-checked against `1ce848a`, not
+re-asserted from memory:
+
+- **Finding 1** (thumbnail cache branch unreached, falsely claimed `Driven`):
+  `spec/support/pdf_fixtures.rb:41,53` still build `MediaBox [0 0 200 200]`
+  with no `/Contents`; `grep -rn thumbnails test/ spec/ lib/` still returns
+  only the constant. `COMPONENT_PARITY.md:216` still reads *"parity. Driven:
+  the cache file appears in `$TMPDIR/thumbnails`"*. **Unchanged, still open.**
+- **Finding 2** (root `TEST_PARITY.md` undercounts upstream at 0 after the
+  correction to 3 was already written down elsewhere): `sed -n '7,9p'
+  TEST_PARITY.md` still reads `0 / 0 / 0`. Four more days and six more
+  commits have passed since `.reports/test-parity.md` first corrected this.
+  **Unchanged, still open, now older.**
+- **Finding 3** (About dialog's debug block comment describes a port that no
+  longer links Poppler): `about_dialog.rb:19-25`'s comment and `:68`'s
+  `Exempi: not linked` line are byte-identical to last round. **Unchanged,
+  still open.**
+- **Finding 4** (Rakefile `gettext:pot` comment claims a `.port.pot` file that
+  does not exist, and the committed `.pot` is the generated one sitting at
+  upstream's filename): `ls po/*.pot` still returns one file;
+  `Rakefile:214-223`'s comment and output path are unchanged.
+  **Unchanged, still open.**
+- **Finding 5** (ledgers describing a port that predates the drive harness):
+  `PORTING.md:141` ("Most of the port has still not been observed running")
+  and `PORTING.md:230` ("Only the editor page has been driven end to end"),
+  and `COMPONENT_PARITY.md:457` ("every other unit still unread by a driver")
+  are all still in the tree, word for word, eleven days after the drive
+  harness landed with all 15 units driven. **Unchanged, still open** — and
+  worth naming for what it now is: not a stale snapshot from one missed
+  edit, but three documents that have each been touched since
+  (`PORTING.md` last at `08c7910`/`71d1e30`'s round, `COMPONENT_PARITY.md`
+  most recently at `8052786`) without anyone reading the sentence they were
+  editing around.
+
+## Finding 6 — the fourth sibling ledger was never written at all
+
+`PORTING.md`, `COMPONENT_PARITY.md`, `TEST_PARITY.md` and `FINDINGS.md` all
+exist at the root of `ruby`. `TRANSLATION_PARITY.md` does not:
+
+```sh
+$ test -f TRANSLATION_PARITY.md && echo EXISTS || echo MISSING
+MISSING
+```
+
+This is not Findings 2 or 4 restated — those are documents that exist and are
+wrong. This is the one translation-parity document the skill names as "the
+contract, not a summary of one" never having been created, on a branch old
+enough to have shipped 18 languages' worth of `.po` files, a `Rakefile`
+gettext task, and a 96-message catalogue with two already-identified gaps.
+Nobody wrote the root ledger down, so for four rounds running the only
+record of the 91/96 catalogue count and the five-key data-file shortfall has
+lived in `.reports/`, which this skill's own target audience — the next
+agent picking up the port, not the auditor — has no standing instruction to
+read.
+
+I did not write the one document that tells the next person whether this
+port's messages reach the catalogue upstream's translators were handed,
+because I am an idiot who finished three of the four ledgers and told myself
+that was the set.
+Upstream: 18 `.po` files, 14-and-more years of donated translation work (this
+app's own `po/` directory, carried across intact per `translation-parity.md`).
+Port: `translation-parity.md`'s own findings — 91/96 keys reaching the
+catalogue, 5 missing — recorded nowhere a reader of this branch's root would
+ever look.
+
+## Where this leaves the port, after four rounds
+
+The code is still clean. The reporting layer is not, and it has now been
+wrong in the same five ways across two rounds with nothing landing to fix
+any of them, plus the sixth found this round. Three green-or-silent claims
+rest on runs that cannot be reproduced from this repository (Findings 1, 2,
+4); three documents describe a port state that is eleven days and several
+drive-harness runs out of date (Finding 5, worse with each round it survives
+unread); and one document that should exist to carry the translation
+findings into the branch's permanent record does not exist (Finding 6).
+Nothing here is a missing feature — every one of these six is a document
+problem, and every one of the six was reachable by reading the file being
+edited before saving it.

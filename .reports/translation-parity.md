@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
-| Port | `ruby` @ `3800624` |
+| Port | `ruby` @ `1ce848a` (re-verified; previous round was `3800624`) |
 | Upstream keys (`msgctxt`, `msgid`) in source | **96** |
 | Present in the port's source, byte-identical | **96** |
 | Reworded, retyped or unmarked | **0** |
@@ -172,3 +172,83 @@ and the change is consistent with the rest of the port. Recorded.
   reason it is not a gap. Both gaps are counted.
 - The source axis passing is reported as 96/96 and does **not** license a
   clean verdict, because the catalogue is the artifact translators consume.
+
+## Re-verification — round 4, `ruby` @ `1ce848a`, with the unresolved count the skill requires and last round omitted
+
+The skill is explicit: *"Never write a ledger while `totals.unresolved` is
+non-zero"* without stating the number. Last round's copy of this document
+resolved every `_(CONSTANT)` call site by hand in its "source axis" table but
+never printed the count the skill asks for. Re-run for this round:
+
+```
+$ msgid-census.sh <origin/main tree> | grep -c '!unresolved'   -> 0
+$ msgid-census.sh <ruby tree>        | grep -c '!unresolved'   -> 24
+```
+
+**Upstream: 0 unresolved. Port: 24.** Every marker whose argument is a bare
+name rather than a string literal — `_(NO_DATE)`, `_(TITLE)`, `_(HEADING)`,
+`_(BODY)`, `_(label)`, `_(title)`, `_(description)`,
+`_(LAYOUTS.fetch(name.to_s, NO_LAYOUT))`, `_(DUPLEX.fetch(name.to_s,
+NO_DUPLEX))`, `_(PASSWORD_LABEL)`, `_(DECRYPT_LABEL)`, `_(DETAILS_TITLE)`,
+`_(NOT_COMPLIANT)`, `_(NO_PREFERENCES)`, `_(UNKNOWN)`, `_(YES)`/`_(NO)` — one
+of them (`_(LABEL)`, `spec/support/translated_host.rb:21`) is the translation
+spec's own test fixture, not app code.
+
+Each of the 23 real sites was traced by hand to its `N_()`-marked definition
+and checked against the generated `.pot` for this round:
+
+| Constant(s) | Defined (`N_()`) at | In `po/pdf-metadata-editor.pot`? |
+|---|---|---|
+| `NO_DATE` | `date_row.rb:30` | ✓ |
+| `TITLE` (password dialog) | `password_dialog.rb:28` | ✓ |
+| `TITLE` (window) | `window.rb` | ✓ |
+| `HEADING`, `PASSWORD_LABEL`, `DECRYPT_LABEL` | `password_dialog.rb:29-31` | ✓ |
+| `BODY` | `save_changes_dialog.rb:32` | ✓ |
+| `DETAILS_TITLE` | `document_view.rb:44` | ✓ |
+| `title` (×2 call sites) | `document_view.rb`, `details_list.rb` loop tables | ✓ |
+| `UNKNOWN`, `NOT_COMPLIANT`, `NO_PREFERENCES` | `pdf_strings.rb:25,64,79` | ✓ |
+| `LAYOUTS`/`NO_LAYOUT`, `DUPLEX`/`NO_DUPLEX` | `pdf_strings.rb:28-46` | ✓, all 9 entries, spot-checked against `src/Document.vala` byte for byte (`Odd numbered pages on the left`, `Flip on the long edge`, `No specific layout`, `No preference`) |
+| `label` (viewer preferences, ×7; permissions, ×8) | `pdf_strings.rb:70-92` tables | ✓, spot-checked (`Center document's window`, `Adding notes`, `Printing in high resolution`) |
+| `YES`, `NO` | `details_list.rb:34-35` | ✓ |
+| `description` (×2, `main.vala` option descriptions) | `main.rb:35-37` (`N_('Open a new window')`, `N_('Print version information and exit')`) | ✓ |
+
+All 24 resolve to messages already present in the catalogue. The count has
+not changed since last round (last round's prose said "24 rows the port has
+over 96" without using the word `unresolved`); this round states it as the
+skill's own metric and shows the trace rather than the conclusion.
+
+**Gap 1 and Gap 2 are unchanged.** `po/pdf-metadata-editor.pot` still has 92
+keys where the source (excluding `po/`) has 96 messages after the `!unresolved`
+rows above are folded in; the same five data-file strings (`Edit PDF document
+metadata`, `PDF;Metadata;Editor;`, `New Window`, the metainfo `<summary>`, the
+Nautilus context-menu item) are still absent, for the same reason
+(`Rakefile:193`'s `gettext_sources` still globs only `lib/**/*.rb` and
+`exe/*`, never reading `po/POTFILES`). `po/pdf-metadata-editor.port.pot`,
+the file `Rakefile:216` says the extraction writes, still does not exist —
+the file at upstream's own filename is still the generated one.
+
+**Languages: still 18 of 18**, `LINGUAS` and all 18 `.po` files still
+byte-identical to upstream's.
+
+## New finding — the root ledger this skill requires does not exist
+
+The port's `ruby` branch carries `PORTING.md`, `COMPONENT_PARITY.md`,
+`TEST_PARITY.md` and `FINDINGS.md` at its root. It does not carry
+`TRANSLATION_PARITY.md`:
+
+```
+$ test -f TRANSLATION_PARITY.md && echo EXISTS || echo MISSING
+MISSING
+```
+
+The skill's Step 3 is explicit that this file, not a copy under `.reports/`,
+is "the contract, not a summary of one," committed alongside the other three.
+Three of the four sibling ledgers exist and are kept (however imperfectly —
+see `test-parity.md`'s re-verification and `accountability-ensurance.md`
+Finding 2 on `TEST_PARITY.md` specifically); the fourth was never written at
+all, so there is no root-level document for anyone to read the 96/92 catalogue
+count, the 5-key data-file gap or the 18-language carry-over from, short of
+this `.reports/` copy or re-deriving it from scratch. This is recorded here
+and carried into `accountability-ensurance.md` as a new finding rather than
+folded silently into the existing two gaps, because it is a different failure
+from either of them: not a wrong number, an absent document.
