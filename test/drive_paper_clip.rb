@@ -90,7 +90,11 @@ CHILD = File.join(SCRATCH, "open_child.rb").tap do |path|
 
     PaperClip::Application.new(app_id: ARGV.shift).then do |app|
       app.build
-      GLib::Timeout.add(2000) do
+      # 2000ms was tight on a loaded box for the two-document case below,
+      # which spins up two windows and parses two PDFs before this fires;
+      # 5000ms gives it room without slowing the common one-document case,
+      # since the timeout is cancelled the moment it runs either way.
+      GLib::Timeout.add(5000) do
         app.windows.each do |window|
           puts "WINDOW\\t#{'#'}{window.view_stack.visible_child_name}\\t" \\
                "#{'#'}{window.document_manager.document&.basename}"
@@ -145,7 +149,13 @@ end
 
 application = PaperClip::Application.new
 
-GtkDriver.drive(application, shots: SHOTS, interval: 500) do |d, app|
+# 500ms (the driver's default) was enough on an idle machine but flaked under
+# load: Document.open runs the parse on ThreadManager's worker and reports
+# back through GLib::Idle, and a step that checks the result one tick later
+# sometimes ran before that idle callback had been dispatched, failing a
+# check that had nothing wrong with it. 1500ms gives the worker thread enough
+# wall-clock headroom on a loaded box.
+GtkDriver.drive(application, shots: SHOTS, interval: 1500) do |d, app|
   d.window { app.windows.first.window }
 
   # Shorthands. `app.windows` is the application's own list, so these follow
