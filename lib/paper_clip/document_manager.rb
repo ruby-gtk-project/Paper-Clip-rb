@@ -38,13 +38,14 @@ module PaperClip
       value&.on_change { mark_changed(value) }
     end
 
-    # `target_path` defaults to the file the document came from, which is what
-    # the plain Save action wants; Save As passes the chosen path instead.
-    def save(target_path = nil, on_done: nil, on_error: nil)
+    # `target_file` is a Gio::File and defaults to the file the document came
+    # from, which is what the plain Save action wants; Save As passes the
+    # chosen file instead.
+    def save(target_file = nil, on_done: nil, on_error: nil)
       @document.then do |doc|
         if doc
           doc.save_async(
-            target_path || doc.path,
+            target_file || doc.original_file,
             on_done:  ->(_) { finish_save(on_done) },
             on_error: on_error,
           )

@@ -301,15 +301,29 @@ module PaperClip
     # both happen in one write: the cached bytes, the new Info dictionary, the
     # rewritten /Metadata stream when there is one, and the cross-reference
     # section that points at them.
-    def save(target_path)
-      ::File.binwrite(target_path, @bytes + update_section)
+    #
+    # `target` is a Gio::File, or a plain path for convenience (the spec
+    # suite saves to paths, and a path is wrapped here rather than in every
+    # caller). Upstream writes to `original_file.get_uri()`, and
+    # `Gio::File#replace_contents` is the counterpart that still works when
+    # the file is on GVFS rather than the local disk — unlike `File.binwrite`
+    # against a bare path, which is what the window used to pass.
+    def save(target)
+      as_file(target).replace_contents(
+        @bytes + update_section,
+        nil,
+        false,
+        :none,
+      )
     end
 
-    def save_async(target_path, on_done: nil, on_error: nil)
-      ThreadManager.run_in_thread(on_done: on_done, on_error: on_error) { save(target_path) }
+    def save_async(target, on_done: nil, on_error: nil)
+      ThreadManager.run_in_thread(on_done: on_done, on_error: on_error) { save(target) }
     end
 
     private
+
+      def as_file(target) = target.is_a?(Gio::File) ? target : Gio::File.new_for_path(target)
 
       # --- The cached copy ---------------------------------------------------
 

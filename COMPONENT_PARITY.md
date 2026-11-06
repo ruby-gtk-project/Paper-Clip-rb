@@ -120,14 +120,19 @@ match, and the labels are marked with their mnemonics intact. **parity.**
 
 Stylesheet: `lib/paper_clip/style.rb` is byte-identical to `src/style.css`.
 
+Closed this round: **save now writes through `Gio::File`, not a bare
+path.** `action_save` passes `document.original_file` and
+`action_save_as` passes the `Gio::File` `save_finish` hands back, straight
+through — neither is reduced to `.path` first. `Document#save` wraps a
+path in `Gio::File.new_for_path` only for the spec suite's convenience and
+writes with `Gio::File#replace_contents` either way, so a document opened
+over GVFS now saves back to the same URI upstream's
+`document_manager.document.original_file.get_uri()` does
+(`window.vala:211`), rather than to whatever local path GIO happened to
+report.
+
 Open on this unit:
 
-- **Save writes to a path, upstream to a URI.** Upstream saves to
-  `document_manager.document.original_file.get_uri()`
-  (`window.vala:211`); the port saves to `document.path`, because
-  `File.binwrite` takes a path. A document opened over GVFS therefore saves
-  to the local path GIO reports, or not at all. Recorded; closing it means a
-  `Gio::File.replace` writer.
 - **Three failure paths log where round 1 toasted.** A dropped non-PDF, a
   failed open and a failed save go to stderr, which is what upstream's
   `critical` calls do. The toast is better UI and it was also three
@@ -447,7 +452,7 @@ Verified end to end, not assumed: `LANGUAGE=de` returns
 |---|---|
 | Units compared | 23 |
 | Upstream units with no port file | 0 |
-| Distinct behaviour gaps named above | 1 — saving to a path rather than a URI |
+| Distinct behaviour gaps named above | 0 (was 1 — saving to a path rather than a URI, closed this round) |
 | Message keys | 96 / 96, 0 gaps |
 | Signals driven | the editor page, end to end; every other unit still unread by a driver |
 | Screenshots taken | **0** |

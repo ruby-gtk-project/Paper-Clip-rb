@@ -296,7 +296,7 @@ module PaperClip
       def action_save
         @document_manager.document.then do |document|
           if document && @document_manager.changed?
-            save_to(document.path)
+            save_to(document.original_file)
           end
         end
       end
@@ -306,7 +306,7 @@ module PaperClip
           if document
             @file_dialog = save_dialog(document)
             @file_dialog.save(window, nil) do |dialog, result|
-              save_to(dialog.save_finish(result).path)
+              save_to(dialog.save_finish(result))
             rescue GLib::Error
               @state = WindowState::NONE
             end
@@ -473,9 +473,9 @@ module PaperClip
 
       # --- Saving -----------------------------------------------------------
 
-      def save_to(target_path)
+      def save_to(target_file)
         file_save_animation
-        @document_manager.save(target_path, on_done: method(:saved), on_error: method(:save_failed))
+        @document_manager.save(target_file, on_done: method(:saved), on_error: method(:save_failed))
       end
 
       def saved
