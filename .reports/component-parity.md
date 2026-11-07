@@ -1,104 +1,82 @@
-# Component parity — Paper Clip (round 7 re-audit)
+# Component parity — Paper Clip (round 8 audit)
 
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` @ `1a00aac` |
-| Units compared | 23 (per `PORTING.md`'s own file mapping, independently re-derived in `component-identification.md`) |
-| Driven this round, fresh | `nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb` → **283 of 283 checks passed, `DRIVE OK`**, exit 0 |
-| Stylesheet | `src/style.css` vs `lib/paper_clip/style.rb`'s heredoc — **byte-identical rule bodies** (diffed directly this round) |
-| Icons | upstream's 5 `gresource.xml` symbolic SVGs = the port's 5 files under `data/icons/hicolor/scalable/actions/`, registered via `Gtk::IconTheme#add_search_path` instead of a gresource path — a correspondence, not a gap |
+| Port | `ruby` @ `60ffe4d` |
+| Units compared | 29 (per `component-identification.md`, re-derived this round) |
+| Driven this round, fresh | `nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb` → **318 of 318 checks passed, `DRIVE OK`**, exit 0 |
+| Stylesheet | `src/style.css` vs `lib/paper_clip/style.rb`'s heredoc — byte-identical rule bodies, unchanged since round 7 (`60ffe4d` did not touch `style.rb`) |
+| Icons | upstream's 5 `gresource.xml` symbolic SVGs = the port's 5 files under `data/icons/hicolor/scalable/actions/`, registered via `Gtk::IconTheme#add_search_path` — a correspondence, not a gap, unchanged |
 | Open component-level gaps | **0 confirmed missing widgets/CSS/signals/actions** |
-| Unverified branches (driven claim does not cover them) | **2 — unchanged from round 6, re-confirmed still open this round** |
+| Driven-but-unverified branches carried from round 7 | **0 — all 5 closed this round, each re-verified below by reading what the new drive step actually asserts, not by trusting the commit message** |
 
-`1a00aac` (the commit since round 6) touched only `Rakefile`,
-`paper-clip-rb.gemspec` and `flake.nix` — no file under `lib/` or `exe/`
-changed, confirmed by `git show --stat 1a00aac`. So this round re-ran the
-drive harness and re-checked the two outstanding branches rather than
-re-deriving the whole inventory from scratch; nothing in that commit could
-have moved a component-parity number, and nothing did.
+`60ffe4d` is the only commit since round 7. `git show --stat 60ffe4d` touched
+`lib/paper_clip/thumbnailer.rb` (9 lines), `test/drive_paper_clip.rb` (+248
+lines) and three prose files. This round re-ran the drive harness and read
+every new block the diff added, rather than re-deriving the whole inventory
+from scratch — nothing else in `lib/` could have moved a component-parity
+number, and nothing did.
 
-## What re-running the drive harness actually proved this round
+## The five gaps round 7 carried forward, closed and re-verified this round
 
-`COMPONENT_PARITY.md` and `PORTING.md` both claim the whole app is driven,
-283/283. Re-running it fresh this round (not trusting the committed number)
-reproduces 283/283, `DRIVE OK`, exit 0 — so **that specific claim holds
-again**, for the third round running. This round's run was captured live,
-step by step, ending `283 of 283 checks passed` / `DRIVE OK`, matching the
-runtime gate this audit was handed (`drive_ok=true`, 283 passed, 0 failed).
+Round 7's `.reports/component-parity.md` named five undriven branches.
+Re-read the actual new code in `test/drive_paper_clip.rb` (not the commit
+message) for each:
 
-## Where the "driven" claim stops short
-
-`PORTING.md`'s own "Next run" section says, about the PNG-cache branch the
-drive harness exercises with `PdfFixtures.big`:
-
-> `ExportError`/`CacheError` are still not driven, since nothing in the
-> harness forces either write to fail.
-
-That is an honest admission, not an excuse — it names the behaviour (what the
-user sees when a thumbnail write fails) and says plainly it is unexercised.
-It is still a **component parity gap**, because `Thumbnailer`'s error-domain
-handling is part of the component: upstream's `Services/Thumbnailer.vala`
-defines both error domains, and nothing anywhere — spec, drive step, or
-otherwise — has ever forced either path to run. A branch no check exercises
-is unverified, not done, independent of whether the admission is honest.
-
-| Gap | Upstream | Port | What is missing |
+| # | Gap, as round 7 left it | What the new drive step actually does | Verdict |
 |---|---|---|---|
-| 1 | `src/Services/Thumbnailer.vala`'s `ExportError` domain | `lib/paper_clip/thumbnailer.rb` defines the same domain | No spec, no drive step, forces a PNG write to fail and asserts the error surfaces |
-| 2 | same file's `CacheError` domain | same file | No spec, no drive step, forces the cache read-back to fail and asserts the error surfaces |
+| 1 | `Thumbnailer::ExportError` never raised by any check | Points `create_cache_file` at a path whose parent directory does not exist, calls `thumbnailer.send(:export, ...)`, asserts `ExportError` is raised, is a `Thumbnailer::Error`, and its message names the file | **closed** — the error is genuinely forced and caught, not stubbed |
+| 2 | `Thumbnailer::CacheError` never raised | Writes a plain file where `cache_directory` expects a directory, points `Dir.tmpdir` at it via `define_singleton_method`, asserts `CacheError` is raised and `Dir.tmpdir` is restored afterward | **closed** |
+| 3 | `DocumentView`'s `@loading` guard never driven into firing | Forces `@loading = true` directly, edits a row to text the document does not have, asserts neither the document nor the dirty flag followed — then releases the guard and re-asserts the real write-back path still works | **closed** |
+| 4 | `DateRow`'s `@syncing` guard never driven | Wraps the row's own `on_change` in a spy, assigns a date from outside (which itself fires `day-selected`), asserts the spy was **not** re-entered, then picks a day for real and asserts the spy fired exactly once with the real pick | **closed** |
+| 5 | `Window#proceed_with_state`'s Discard and empty-selection-Save call sites unreached | Opens a fresh window via the `new-window` action for each case (so neither close risks the application's last window), edits it, blocks the close, answers Discard (or unticks the one row before Save), and asserts the window closes with the edit never written to disk | **closed** |
+
+All five were re-run live this session as part of the 318/318 total, not
+assumed from the diff alone.
+
+## A bug the new coverage actually found, confirmed by reading the fix
+
+Driving `ExportError` found that `write_to_png`'s real failure is
+`Cairo::WriteError`, which is a Ruby `IOError`, not a `Cairo::Error` — so
+`Thumbnailer#export`'s original `rescue Cairo::Error, SystemCallError`
+let it through unrescued. `git show 60ffe4d -- lib/paper_clip/thumbnailer.rb`
+confirms the fix is a one-line widening to `rescue Cairo::Error, IOError,
+SystemCallError`, with a comment naming exactly why the narrower rescue was
+wrong — not merely a broadened `rescue StandardError` that would have
+silently swallowed the new failure mode along with everything else.
 
 ## Three-axis spot check on the units most recently touched
 
-Re-checked by hand this round rather than carried from the ledger:
+- **`thumbnailer.rb`**: read directly. The `rescue` clause is as the commit
+  describes; `ExportError`/`CacheError` are both subclasses of
+  `Thumbnailer::Error`, confirmed by `grep -n "class.*Error" lib/paper_clip/thumbnailer.rb`.
+- **`document_view.rb`**'s `@loading` and **`date_row.rb`**'s `@syncing`:
+  both guards already existed in the code (round 6's reading found them);
+  what changed this round is only that a drive step now forces each one to
+  matter. No `lib/` change was needed or made for either.
+- **`window.rb`**'s `proceed_with_state`: unchanged source, now reached from
+  all three call sites by name in the drive log (`grep -n
+  "proceed_with_state\|Discard\|discard" test/drive_paper_clip.rb` shows the
+  new Discard-path block).
 
-- **`document_thumbnail.rb` / `thumbnailer.rb`** (closed round 3, driven round
-  5): `grep -n thumbnails test/drive_paper_clip.rb` now shows the harness
-  reading back a PNG and checking a pixel darker than the backing rectangle —
-  confirmed by reading `test/drive_paper_clip.rb`'s new block directly, not by
-  trusting the prose. This closes the "driven but with nothing drawn" failure
-  mode the previous round's audit caught here.
-- **`about_dialog.rb`**: `PORTING.md`/`COMPONENT_PARITY.md` say the debug
-  block prints a Poppler version and the port's own gem version in place of
-  Exempi. Read `about_dialog.rb` directly: it does — `Poppler #{poppler_version}`
-  and a line naming `XmpPacket`'s own version constant. The stale comment
-  above it (claiming the port links neither Poppler nor Exempi) was rewritten
-  in `988eaac`; re-read this round, it now matches the code beneath it.
-- **`window.rb`**'s `proceed_with_state` and **`date_row.rb`**'s `@syncing`
-  guard, named in `TEST_PARITY.md` as owed drive coverage: grepped for in
-  `test/drive_paper_clip.rb` *and* `spec/` again this round (`grep -rn
-  "proceed_with_state\|syncing" test/ spec/`) — neither name appears
-  anywhere in either tree, same as round 6. The widgets exist and their
-  signals are connected (component parity on the structural axes holds),
-  but the specific re-entrancy guard upstream's `GLib.BindingGroup`
-  replacement depends on has never been driven into firing. Recorded here
-  because a connected signal is not a working signal (skill rule, Step 5) —
-  carried into `test-parity.md` as the behaviour still owed.
-- **`Thumbnailer::ExportError`/`CacheError`**: re-grepped this round across
-  `spec/` and `test/drive_paper_clip.rb` — zero hits in either, same as
-  round 6. `1a00aac` did not touch `thumbnailer.rb`, so there was no reason
-  to expect this to have moved, and it has not.
+## What is still outside the drive harness's reach, and why — unchanged from round 7
 
-## What is still missing, stated plainly
-
-Two upstream behaviours this component owns have never been observed to run,
-in any round so far:
-
-1. A failed PNG export (`Thumbnailer::ExportError`) surfacing to the user
-   instead of crashing or showing a blank thumbnail.
-2. A failed cache read-back (`Thumbnailer::CacheError`) doing the same.
-3. The three re-entrancy guards (`document_view.rb`'s `@loading`,
-   `date_row.rb`'s `@syncing`, `window.rb`'s `proceed_with_state`) actually
-   suppressing the loop or race each one exists to prevent.
-
-Nobody has written a spec or a drive step that forces any of these five
-paths to run. That is not a decision anyone made; it is three rounds of
-this audit finding the same gap and nobody since has closed it.
+`drive-run.md`'s existing list (`g_application_open`'s inbound-only
+marshalling, `AdwAlertDialog`'s missing `response()` binding,
+`GtkFileDialog`'s async-only chooser) is unaffected by this round's commit —
+none of those binding gaps were touched. Re-confirmed live: the 318-check
+run still drives the open-path through a child process and still answers
+alert dialogs by clicking the labeled button rather than emitting a signal.
 
 ## Rules applied
 
-- Did not report parity from the drive harness total alone — spot-checked
-  three specific units' source against the claim.
-- Did not treat "driven" as a single yes/no: the PNG-cache *happy* path is
-  driven; its two error domains are not, and both states are recorded
-  separately rather than folded into one green row.
+- Did not report parity from the drive harness total alone — read the
+  actual new assertions for all five previously-open gaps rather than
+  trusting "closed" in the commit message.
+- Treated "a check exists for X" and "X is proven" as different claims,
+  and verified each new block proves the specific behaviour named (the
+  guard actually suppresses the loop, not merely that the method runs
+  without raising).
+- Re-ran the drive harness live in this session rather than citing a
+  number from `PORTING.md` or `COMPONENT_PARITY.md`.

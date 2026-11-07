@@ -4,9 +4,9 @@
 |---|---|
 | Harness | `test/drive_paper_clip.rb` + `test/gtk_driver.rb` |
 | Command | `nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb` |
-| Result | **278 of 278 checks passed — `DRIVE OK`**, three consecutive runs |
-| Screenshots | 18 PNGs under `tmp/shots/`, all read back |
-| Spec suite | `134 examples, 0 failures` |
+| Result | **318 of 318 checks passed — `DRIVE OK`**, re-run fresh for the round 8 audit (this count was 278, then 283, in earlier rounds; `60ffe4d` added the 35 checks that close the `Thumbnailer` error-domain and re-entrancy-guard gaps — see `.reports/component-parity.md` and `.reports/test-parity.md`) |
+| Screenshots | 19 PNGs under `tmp/shots/`, all read back |
+| Spec suite | `134 examples, 0 failures`, re-run fresh |
 
 The harness builds the real application, opens the real windows and dialogs,
 loads real PDFs off disk — including a genuinely AES-128-encrypted one — and
@@ -15,8 +15,9 @@ under `lib/paper_clip/`.
 
 ## Port bugs the run found
 
-Both were invisible to `ruby -c`, to `require`, and to the spec suite, and
-both broke a feature that had therefore never worked for anyone.
+All three were invisible to `ruby -c`, to `require`, and to the spec suite,
+and each broke a feature or an error path that had therefore never worked
+for anyone, or never been proven to.
 
 ### 1. Drag and drop raised `NoMethodError` and took the process with it
 
@@ -54,6 +55,18 @@ that was not on screen.
 Fixed in `lib/paper_clip/application.rb` by listening for the application's
 `window-removed` instead, which `gtk_window_destroy` fires on its way out
 whatever the reference count is.
+
+### 3. A failed thumbnail export did not raise `Thumbnailer::ExportError`
+
+`Thumbnailer#export`'s `rescue Cairo::Error, SystemCallError` did not match
+the exception `surface.write_to_png` actually raises on a real write
+failure, `Cairo::WriteError` — which is a Ruby `IOError`, not a
+`Cairo::Error`, under the cairo-ruby bindings. A write failure (missing
+parent directory, full disk) would have propagated unrescued instead of
+surfacing the port's own named error. Found by the round 8 drive step that
+forces the write to fail for real, rather than by inspection.
+
+Fixed in `lib/paper_clip/thumbnailer.rb` by also rescuing `IOError`.
 
 ## Binding gaps — not port bugs, and not worked around
 
