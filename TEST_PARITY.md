@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` branch, round 4 |
+| Port | `ruby` branch, round 5 |
 | Upstream tests | **3** |
 | Ported | **3** |
 | Gaps | **0** |
-| Port tests (Extra) | **134 examples, 0 failures** + a 278-check drive harness |
+| Port tests (Extra) | **134 examples, 0 failures** + a 283-check drive harness |
 | Test command | `nix develop --command rspec --require ./spec/spec_helper.rb -Ilib -Ispec spec` |
 | Data validation command | `nix develop --command rake test:data` |
 
@@ -91,15 +91,22 @@ Two things found by writing this suite rather than by reading the code:
   first draft of the spec asserted that `-4` revoked printing, and the code
   was right.
 
-### `test/drive_paper_clip.rb` — 278 checks, 99 steps, 18 screenshots
+### `test/drive_paper_clip.rb` — 283 checks, 101 steps, 19 screenshots
 
 The harness builds the real application under `xvfb-run`, opens the real
 windows and dialogs, loads real PDFs off disk including a genuinely AES-128
 encrypted one, and asserts the observable result of each interaction. See
-`COMPONENT_PARITY.md` for what it did and did not reach — in particular,
-`Thumbnailer#load_scaled`'s PNG-cache branch and the renderer's actual output
-are both unexercised by any committed fixture; see that file's note on the
-fixtures this round adds to close that.
+`COMPONENT_PARITY.md` for what it did and did not reach.
+
+**Closed this round:** `Thumbnailer#load_scaled`'s PNG-cache branch and the
+renderer's actual output were previously unexercised by any committed
+fixture — every PDF the suite built was 200×200, far under the 306,250px
+threshold the branch requires. `PdfFixtures.big` is a 600×600 page carrying
+an actual content stream (a filled black rectangle over its bottom half, not
+a blank page), and the harness loads it, reads the PNG `write_to_png` wrote
+back out of `$TMPDIR/thumbnails/`, and checks for a pixel darker than the
+white backing rectangle — proving the branch renders the document rather
+than drawing nothing.
 
 ## Owed, and why it is not written
 

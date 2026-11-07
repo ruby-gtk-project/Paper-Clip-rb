@@ -17,16 +17,15 @@ module PaperClip
   # `translator_credits` is set, from upstream's own msgid, so the eighteen
   # catalogues' credits lines reach the dialog (src/application.vala:191).
   #
-  # The debug block lists every library a bug report needs. I did not keep
-  # upstream's Poppler line, because this port links neither it nor Exempi: it
-  # parses the PDF itself (see Document). That is a real difference in what a
-  # bug report can say, and it is written down in FINDINGS.md as the cost of
-  # the Poppler binding being unavailable rather than left implicit here.
-  # GdkPixbuf is printed, because the port does link it. In Exempi's place,
-  # since this port has no Exempi binding and edits the XMP packet as XML (see
-  # XmpPacket) instead, the debug block names this gem's own version rather
-  # than a library that never ran — a maintainer reading a bug report can then
-  # tell which XMP code produced it.
+  # The debug block lists every library a bug report needs. This port does
+  # link Poppler (see Poppler, Thumbnailer) — for rendering the page-one
+  # preview only, never for reading or writing metadata, which stays on this
+  # port's own parser (see Document) — so its runtime version prints like
+  # GdkPixbuf's. There is no Exempi binding (none exists for this gem stack),
+  # so in its place the debug block names this gem's own version, under
+  # XmpPacket, the pure-Ruby code that reads and rewrites the XMP packet
+  # instead — a maintainer reading a bug report can then tell which XMP code
+  # produced it. FINDINGS.md §1 and §2 have the full story for each.
   module AboutDialog
     include Translations
 

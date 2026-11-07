@@ -142,9 +142,11 @@ From `.reports/component-parity.md` (5):
    code actually ran.
 5. ~~Most of the port has still not been observed running.~~ Closed as of
    the drive harness reaching the whole app: `test/drive_paper_clip.rb` now
-   runs 278 checks across 99 steps and 18 screenshots, reaching every file
-   under `lib/paper_clip/` — all 15 widget units, not only the editor page.
-   `COMPONENT_PARITY.md` and `TEST_PARITY.md` carry the current numbers.
+   runs 283 checks across 101 steps and 19 screenshots, reaching every file
+   under `lib/paper_clip/` — all 15 widget units, not only the editor page,
+   and, as of round 5, the PNG-cache branch of `Thumbnailer` with a fixture
+   that actually clears its threshold. `COMPONENT_PARITY.md` and
+   `TEST_PARITY.md` carry the current numbers.
 
 From `.reports/component-identification.md` (3): ~~`DocumentThumbnail` and
 `Thumbnailer` have no port unit; `*.service.in` has no port unit.~~ All three
@@ -224,15 +226,22 @@ and installed only by the flake.
 In order:
 
 1. ~~Check a driver into the repository.~~ Done: `test/drive_paper_clip.rb`
-   is checked in and reaches the whole app, 278/278 checks, 18 screenshots.
+   is checked in and reaches the whole app, 283/283 checks, 19 screenshots.
 2. ~~Drive every other unit.~~ Done: all 15 widget units under
    `lib/paper_clip/` are reached by the drive harness, not only the editor
    page.
+2a. ~~Drive `Thumbnailer#load_scaled`, the PNG-cache branch, with a page big
+    enough and dark enough to prove it rendered the document.~~ Done in
+    round 5: `PdfFixtures.big` (a 600×600 page with a filled rectangle on
+    it) crosses the branch's own threshold, and the harness reads the PNG
+    `write_to_png` wrote and checks for a pixel darker than the white
+    backing rectangle. `ExportError`/`CacheError` are still not driven,
+    since nothing in the harness forces either write to fail.
 3. The three widget-level guards `TEST_PARITY.md` lists as owed
    (`@loading` in `document_view.rb`, `@syncing` in `date_row.rb`,
    `proceed_with_state` in `window.rb`) — still open; the harness now has
    the machinery to drive them, it just has not been pointed at them yet.
-4. ~~Screenshots, which nothing has produced yet.~~ Done: 18, taken by the
+4. ~~Screenshots, which nothing has produced yet.~~ Done: 19, taken by the
    drive harness.
 5. ~~Restore the 5 dropped `.pot` keys; install the `.mo` files from the gem
    as well as from the flake.~~ The `.pot` keys are restored this round

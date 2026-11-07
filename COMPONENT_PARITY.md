@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` branch, round 4 |
+| Port | `ruby` branch, round 5 |
 | Units compared | 23 |
 | Units with no port file at all | **0** (was 2) |
-| Driven (signals actually fired) | the whole app — `test/drive_paper_clip.rb`: **278 of 278 checks passed, `DRIVE OK`**, all 15 widget units reached, not only the editor page |
-| Screenshots | **18**, under `tmp/shots/` |
+| Driven (signals actually fired) | the whole app — `test/drive_paper_clip.rb`: **283 of 283 checks passed, `DRIVE OK`**, all 15 widget units reached, not only the editor page — including, as of this round, the PNG-cache branch of `Thumbnailer` |
+| Screenshots | **19**, under `tmp/shots/` |
 
 The file map is in `PORTING.md`. Costs and open questions are in
 `FINDINGS.md`. Message keys are in the translation section at the foot of this
@@ -218,7 +218,7 @@ Driven: a 400×600 page rendered to a `GtkRenderNodePaintable` of 350×525.
 | memory format from byte order | `B8G8R8A8_PREMULTIPLIED` / `A8R8G8B8_PREMULTIPLIED`, cached | same, cached | parity |
 | surface allocated before the render | 1 | 1 | parity: `Cairo.ImageSurface` ARGB32 at the page's truncated size |
 | render off the main loop | ThreadPool with one worker | `ThreadManager`'s one worker, with the GVL released across `Poppler::Page#render` | correspondence: one job covers render and load where upstream awaits each separately. `FINDINGS.md` §1 on the GVL |
-| big page → downscaled PNG | `write_to_png`, then `from_file_at_size` | same | parity by reading only. This branch fires above `350² × 2.5 = 306,250` px; every committed fixture PDF is `200 × 200 = 40,000` px, so `write_to_png`, the scale-step loop, `from_file_at_size`, `ExportError` and `CacheError` are never entered by anything in the repository. No fixture over ~554×554 exists yet to drive it — see `TEST_PARITY.md` |
+| big page → downscaled PNG | `write_to_png`, then `from_file_at_size` | same | **parity, driven as of round 5**: `PdfFixtures.big` is a 600×600 page (`360,000px`, clearing the `350² × 2.5 = 306,250` threshold) with an actual filled rectangle on it, not a blank one, and `test/drive_paper_clip.rb` loads it, reads the PNG back out of `$TMPDIR/thumbnails/` and checks a pixel darker than the white backing rectangle is in it — not just that the file exists. `write_to_png`, the scale-step loop, `from_file_at_size`, and the export path are all driven; `ExportError`/`CacheError` still are not, since nothing forces either write to fail |
 | small page → memory texture | `Gdk.MemoryTexture` over a copy of the surface bytes | same; `surface.data` *is* the copy | parity. Driven |
 | step loop for the scale factor | 0.1 up by 0.1 while below 0.8 | same seven steps, else 0.8 | parity, including upstream multiplying the pixel count by the factor rather than its square |
 | cache path | `$TMPDIR/thumbnails/<basename>.png` | same | parity |
@@ -454,8 +454,8 @@ Verified end to end, not assumed: `LANGUAGE=de` returns
 | Upstream units with no port file | 0 |
 | Distinct behaviour gaps named above | 0 (was 1 — saving to a path rather than a URI, closed this round) |
 | Message keys | 96 / 96 in source; `rake gettext:pot` now extracts all 96 (was 91 before this round — see `TRANSLATION_PARITY.md`) |
-| Signals driven | the whole app, not only the editor page: `test/drive_paper_clip.rb` reaches all 15 widget units, 278 of 278 checks passed |
-| Screenshots taken | **18**, under `tmp/shots/` |
+| Signals driven | the whole app, not only the editor page: `test/drive_paper_clip.rb` reaches all 15 widget units, 283 of 283 checks passed, including the PNG-cache branch of `Thumbnailer` as of round 5 |
+| Screenshots taken | **19**, under `tmp/shots/` |
 
 Driving the app for the first time, in an earlier round, cost three
 `NoMethodError`s that this table had scored as parity — see `FINDINGS.md` §8.

@@ -67,6 +67,30 @@ module PdfFixtures
     write(path, build(objects, "/Size 3 /Root 1 0 R /Info 2 0 R /ID #{ID}"))
   end
 
+  # A page big and dark enough to prove the downscaled-PNG branch of
+  # Thumbnailer actually renders the document rather than drawing nothing.
+  # 600×600 clears `DocumentThumbnail::MAX_SIZE` (350) squared times
+  # Thumbnailer::AREA_THRESHOLD (2.5) — 306,250 — so this is the file the
+  # drive harness hands to the PNG-cache path, not the in-memory one. The
+  # content stream fills the bottom half black with the page's default fill
+  # colour, so a render that drew nothing (a white rectangle) is
+  # distinguishable, pixel for pixel, from a render that drew this page.
+  def self.big(path, info: INFO)
+    content = "0 0 600 300 re f\n"
+    objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 600] /Contents 5 0 R >>",
+      info,
+      page_content_stream(content),
+    ]
+    write(path, build(objects, "/Size 6 /Root 1 0 R /Info 4 0 R /ID #{ID}"))
+  end
+
+  def self.page_content_stream(payload)
+    "<< /Length #{payload.bytesize} >>\nstream\n#{payload}\nendstream"
+  end
+
   def self.stream_object(payload)
     "<< /Type /Metadata /Subtype /XML /Length #{payload.bytesize} >>\nstream\n#{payload}\nendstream"
   end

@@ -69,6 +69,11 @@ ELLIPSIS_NAME = PdfFixtures.classic(File.join(SCRATCH, "averylongunbrokenfilenam
 
 NOT_A_PDF = File.join(SCRATCH, "notes.txt").tap { |path| File.write(path, "not a pdf\n") }
 
+# A 600×600 page with a black rectangle actually drawn on it — big enough to
+# clear Thumbnailer's PNG-cache threshold, and dark enough that a render
+# which drew nothing would be visibly wrong rather than merely unproven.
+BIG = PdfFixtures.big(File.join(SCRATCH, "big.pdf"))
+
 def file_for(path) = Gio::File.new_for_path(path)
 
 # GtkDropTarget's "drop" signal carries a GValue, which is what a real drag
@@ -1031,6 +1036,46 @@ GtkDriver.drive(application, shots: SHOTS, interval: 1500) do |d, app|
     d.check("and it is still on its welcome page") do
       app.windows.first.view_stack.visible_child_name == PaperClip::Window::EMPTY_PAGE
     end
+  end
+
+  # --- The PNG-cache branch of Thumbnailer, with content on the page ------
+
+  # Every load above was a 200×200 fixture, far under Thumbnailer's own
+  # threshold, so every one of them took the in-memory branch of
+  # `load_texture`. A renderer that drew nothing would have passed every
+  # check those loads faced just as easily as one that drew the page — the
+  # PNG-cache branch was never reached, and a blank thumbnail and a correct
+  # one are indistinguishable without a pixel to look at. BIG is big enough
+  # to cross the threshold and dark enough that the two outcomes are
+  # distinguishable on disk, not just in a reading of the source.
+  d.step("a page big enough to need the PNG cache loads in the surviving window") do
+    app.windows.first.open_command_line_file(file_for(BIG))
+  end
+
+  d.step("the PNG-cache branch rendered the page, not a blank rectangle") do
+    survivor = app.windows.first
+    cache_path = File.join(Dir.tmpdir, "thumbnails", "#{File.basename(BIG)}.png")
+    d.check("the editor swapped in") do
+      survivor.view_stack.visible_child_name == PaperClip::Window::EDITOR_PAGE
+    end
+    d.check("600×600 clears Thumbnailer's own threshold") do
+      (600 * 600) >= (PaperClip::DocumentThumbnail::MAX_SIZE**2) * PaperClip::Thumbnailer::AREA_THRESHOLD
+    end
+    d.check("the downscaled PNG actually landed in the cache directory") do
+      File.exist?(cache_path)
+    end
+    d.check("the image has a paintable") do
+      !survivor.document_view.document_thumbnail.image.paintable.nil?
+    end
+    d.check("the cached render drew the page's black rectangle, not a blank one") do
+      pixbuf = GdkPixbuf::Pixbuf.new(file: cache_path)
+      # A render that drew nothing over the white backing rectangle would be
+      # 0xFF on every channel of every pixel; the fixture fills the bottom
+      # half of the page black, so at least one byte has to read far darker.
+      # `pixels` comes back as an array of byte values, not a packed string.
+      pixbuf.pixels.any? { |byte| byte < 0x80 }
+    end
+    d.shot("19-big-thumbnail", survivor.window)
   end
 
   # --- Refusals and the quit path -----------------------------------------
