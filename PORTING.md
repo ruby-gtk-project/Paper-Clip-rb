@@ -123,9 +123,37 @@ port equivalent in the Rakefile or `spec/`.
 
 ## Open gaps
 
-13 gaps across the four parity reports in `.reports/`, and clean=false. Four
-of them closed in round 3 and are struck through below rather than deleted,
-so the ledger still shows what was owed and when.
+18 gaps have been logged against this ledger across seven audit rounds; 13
+are closed and struck through below rather than deleted, so the ledger still
+shows what was owed and when. **5 are still open**, surfaced in round 6 and
+never before added here as numbered items — they lived only in this file's
+"Next run" prose and in `.reports/component-parity.md` and
+`.reports/test-parity.md`, so a reader who stopped at this section's old "13
+gaps, all struck through" would have concluded nothing was outstanding. That
+was wrong of whoever wrote this section that way; the open gaps are listed
+as gaps here now, not just as "next run" items. clean=false.
+
+From `.reports/component-parity.md` and `.reports/test-parity.md`, still
+open as of round 7 (5):
+
+14. `Thumbnailer::ExportError` is never driven — no spec and no drive step
+    forces a PNG export write to fail and checks the error surfaces to the
+    user rather than crashing or showing a blank thumbnail.
+15. `Thumbnailer::CacheError` is never driven — same, for a failed cache
+    read-back.
+16. `DocumentView`'s `@loading` re-entrancy guard is never driven into
+    firing — nothing loads a document while also editing a field fast
+    enough to prove the write-back loop it exists to prevent is actually
+    prevented.
+17. `DateRow`'s `@syncing` guard is never driven the same way.
+18. `Window#proceed_with_state` is never driven — the method exists and is
+    called from three sites in `window.rb`, but no spec or drive step
+    reaches any of the three and checks the save-or-discard decision
+    actually blocks the quit until it is made.
+
+None of these five is a decision anyone took. They are behaviour upstream
+has and the port's code claims to replicate, that nobody has ever watched
+run.
 
 From `.reports/component-parity.md` (5):
 
@@ -172,7 +200,10 @@ item 5 mean `gem install paper-clip-rb` now carries all 18 compiled
 catalogues too.
 
 `.reports/accountability-ensurance.md` reports 0 scanner hits in `lib/`,
-`exe/` and `spec/`, and 4 findings in what the code *says* about its gaps.
+`exe/` and `spec/` as of round 7, and 4 findings across rounds in what the
+code and this ledger *say* about the port's gaps — the fourth, found this
+round, is this file's own "Open gaps" section undercounting itself; see
+"Open gaps" above and Finding 4 in that report.
 
 ## Blockers
 

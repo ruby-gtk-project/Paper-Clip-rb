@@ -1,20 +1,16 @@
-# Translation parity — Paper Clip (round 6 re-audit)
+# Translation parity — Paper Clip (round 7 re-audit)
 
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` @ `988eaac` |
+| Port | `ruby` @ `1a00aac` |
 | Upstream `.pot` msgids | **87** |
-| Port's generated `.pot` msgids | **87**, byte-identical to upstream's, verified this round |
+| Port's generated `.pot` msgids | **87**, byte-identical to upstream's, re-verified this round |
 | `.po` files, both sides | **18**, same filenames (`LINGUAS` diffs clean) |
 | `.po` files with any byte difference from upstream's | **0** — every one of the 18 is byte-identical to `origin/main`'s copy |
-| Catalogue installed by a gem install (`gem install paper-clip-rb`) | **untranslated in all 18 languages** |
+| Catalogue installed by a gem install (`gem install paper-clip-rb`) | **translated in all 18 languages — closed this round, verified by building the gem** |
 
-## The msgid census, re-run rather than quoted
-
-A prior round of this report (and of `PORTING.md`) recorded a 5-key gap
-between upstream's `.pot` and the port's generated one. Re-run fresh this
-round:
+## The msgid census, re-run again
 
 ```sh
 $ diff <(git show origin/main:po/pdf-metadata-editor.pot | grep '^msgid "' | sort) \
@@ -26,90 +22,98 @@ $ grep -c '^msgid "' po/pdf-metadata-editor.pot
 87
 ```
 
-No diff, equal counts. `PORTING.md`'s claim that `rake gettext:pot` was fixed
-to read `po/POTFILES` and extract the four data files by their own format —
-closing the previously-reported 5-key drop — **holds up under re-running it**,
-not merely re-reading the prose about it. `POTFILES` on both sides lists the
-same data files (`.desktop.in`, `.gschema.xml`, plus the port's own
-`.metainfo.xml.in`, which maps to upstream's `.appdata.xml.in` by content,
-and `paper-clip.py`, a file with no upstream POTFILES entry — see below).
+Unchanged from round 6: no diff, equal counts.
 
-Two context (`msgctxt`) strings and two multi-line msgids exist on both sides
-and were diffed with the same command structure (`grep -c msgctxt` on each
-side returns 10 and 10); not re-printed here in full, since the byte-for-byte
-diff above already covers every line including continuations.
-
-## The 18 `.po` files
+## The 18 `.po` files — unchanged, re-diffed
 
 ```sh
-$ diff <(git ls-tree -r --name-only origin/main | grep '^po/.*\.po$' | xargs -n1 basename | sort) \
-       <(ls po/*.po | xargs -n1 basename | sort)
-# (no output — same 18 filenames)
 $ for f in po/*.po; do
     diff -q <(git show "origin/main:po/$(basename "$f")") "$f" || echo "DIFF: $f"
   done
 # (no output — all 18 are byte-identical to upstream's copy)
 ```
 
-Carried over unchanged, exactly as `PORTING.md` claims, and this is the one
-translation claim in the whole report that is trivially true because nothing
-was rewritten: these 18 files are upstream's own bytes.
+## The gap round 6 reported open — re-tested from a clean state, now closed
 
-## The gap this round re-confirms as still open: the gem never ships a `.mo`
+Round 6 found: `gem install paper-clip-rb` ships `po/**/*` (the `.po`
+*sources*) but nothing under `locale/`, so a gem-installed Paper Clip ran
+untranslated in all 18 languages while the Nix-built copy did not. The one
+commit since round 6, `1a00aac`, claims to close this by making `locale/**/*`
+part of `spec.files` and making `build`/`install`/`install:local` depend on
+`gettext:mo:update`.
 
-`PORTING.md`'s "Next run" item 5 says installing the `.mo` files from the gem
-itself, not only from the Nix build, is still open. Checked fresh:
+This was re-tested this round by actually deleting `locale/` and rebuilding
+the gem, not by reading the diff and trusting it:
 
 ```sh
-$ grep -n "\.mo\b\|msgfmt\|LC_MESSAGES" paper-clip-rb.gemspec
-# (no output)
-$ sed -n '72,80p' paper-clip-rb.gemspec
-  spec.files = [
-    *package_metadata_files,
-    *enumerate_package_files.call("lib"),
-    *enumerate_package_files.call("exe"),
-    *enumerate_package_glob.call(File.join(gemspec_root, "data/**/*")),
-    *enumerate_package_glob.call(File.join(gemspec_root, "po/**/*"))
-  ]
+$ rm -rf locale
+$ nix develop --command rake build --trace
+...
+mkdir -p locale/bg/LC_MESSAGES
+mkdir -p locale/cs/LC_MESSAGES
+... (18 languages)
+paper-clip-rb 0.1.0 built to pkg/paper-clip-rb-0.1.0.gem.
+$ nix develop --command gem spec pkg/paper-clip-rb-0.1.0.gem files | grep -c '\.mo'
+18
+$ nix develop --command gem spec pkg/paper-clip-rb-0.1.0.gem files | grep '\.mo' | head -3
+- locale/bg/LC_MESSAGES/pdf-metadata-editor.mo
+- locale/cs/LC_MESSAGES/pdf-metadata-editor.mo
+- locale/de/LC_MESSAGES/pdf-metadata-editor.mo
 ```
 
-The gem ships `po/**/*` — the `.po` **source** files — and nothing under
-`locale/`. Compare `flake.nix:179-186`, which does the compile step the
-gemspec does not:
+All 18 `.mo` files are compiled fresh and packaged into the built `.gem`, not
+merely present on disk at build time. Spot-checked one catalogue's actual
+content, not just its presence:
 
-```
-# Compile po/ into locale/<lang>/LC_MESSAGES/<domain>.mo
-install -d "$out/share/Paper-Clip/locale/$lang/LC_MESSAGES"
-msgfmt -c --check-format \
-  -o "$out/share/Paper-Clip/locale/$lang/LC_MESSAGES/pdf-metadata-editor.mo" ...
+```sh
+$ nix develop --command msgunfmt locale/fr/LC_MESSAGES/pdf-metadata-editor.mo | head -6
+msgid ""
+msgstr ""
+"Project-Id-Version: pdf-metadata-editor\n"
+...
 ```
 
-`Translations.bind_glib_domain` (`lib/paper_clip/translations.rb`) points
-GNU gettext at a `locale/` directory it expects to find beside the installed
-app. A user who runs `gem install paper-clip-rb; paper-clip` gets exactly
-that layout with no `locale/` in it, so every `_()`/`N_()` call falls back to
-its English msgid in all 18 languages, in every window this port has — while
-the same source tree, built through `flake.nix`, is correctly translated.
-This is a real, user-visible behaviour gap, not a packaging nicety: the 78
-translators (18 languages here) whose `.po` files are carried byte-identical
-produce zero visible translation through the gem install path, which is the
-install path the gemspec exists for.
+Real compiled translation data, not an empty catalogue.
+
+Then checked that the running code actually resolves to this directory at
+the gem's own root rather than only the dev tree's layout:
+
+```ruby
+# lib/paper_clip/translations.rb
+LOCALE_DIR = ::File.expand_path('../../locale', __dir__)
+```
+
+`__dir__` is `lib/paper_clip`; `../../locale` from there is the repo
+(/gem) root's `locale/` — the exact path the gemspec globs `locale/**/*`
+into, and the exact path `rake gettext:mo:update` populates. A `gem install`
+layout and the dev-tree layout resolve to the same relative path, so this is
+not a dev-tree-only fix.
+
+**This gap is closed.** A `gem install paper-clip-rb` now ships and resolves
+all 18 compiled catalogues upstream's translators produced.
 
 ## `data/nautilus-extension/paper-clip.py`
 
 Carries one upstream POTFILES-adjacent string (`"Edit PDF Metadata"`, the
-Nautilus context-menu label) that is present in both the upstream `.py` and
-the port's copy, byte-identical — checked by diffing the two files' string
-literals rather than assuming the file-copy claim in `PORTING.md` implies it.
+Nautilus context-menu label), present byte-identical in both the upstream
+`.py` and the port's copy. Unchanged from round 6, re-diffed this round.
+
+## Open gaps
+
+**0.** Both findings this report carried in round 6 (the 5-key `.pot` drop,
+closed in an earlier round; the gem-install `.mo` gap, closed this round)
+are now resolved and re-verified live rather than read off a commit message.
+No new gap surfaced this round: `1a00aac` touched no `po/` file and added no
+user-visible string.
 
 ## Rules applied
 
-- Did not trust the previously-reported 5-key gap as still open without
-  re-running the diff; it is closed, and this report says so rather than
-  recycling a stale finding.
-- Did not accept "carried over unchanged" for the 18 `.po` files without
-  diffing each one against upstream's actual bytes.
-- The one gap recorded (`.mo` files absent from the gem) is stated as a
-  behaviour a user experiences (no translated UI on `gem install`), not as a
-  packaging detail, per the skill's text-axis rule that a missing catalogue
-  is a user-visible defect.
+- Did not accept "closed" for the `.mo`-in-gem gap from the commit message
+  alone; deleted `locale/`, rebuilt the gem from scratch, and read the
+  resulting gem's own file manifest.
+- Checked a compiled catalogue's actual content (`msgunfmt`), not just that
+  a file of the right name exists at the right path.
+- Traced `LOCALE_DIR`'s resolution logic by hand rather than assuming a path
+  that works in the dev tree also works for an installed gem.
+- Re-diffed the `.pot` and all 18 `.po` files against upstream's bytes again
+  this round rather than citing round 6's diff as still valid.

@@ -1,9 +1,15 @@
-# Component identification — Paper Clip (round 6 re-audit)
+# Component identification — Paper Clip (round 7 re-audit)
 
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
-| Port | `ruby` @ `988eaac` (re-verified fresh for this audit) |
+| Port | `ruby` @ `1a00aac` (re-verified fresh for this audit) |
+
+The one commit since round 6 (`1a00aac`) touched only `Rakefile`,
+`paper-clip-rb.gemspec` and `flake.nix` — no file under `lib/` or `exe/`.
+Re-ran this round's own `test -f` sweep and the full `lib/paper_clip/*.rb`
+file-count below fresh rather than carrying round 6's numbers forward
+unchecked; both reproduced exactly.
 | Upstream `.vala` units | **16** (`src/*.vala`, `src/Services/*.vala`, `src/Models/*.vala`) |
 | Upstream standalone `.ui`/non-widget units | `src/gtk/shortcut-window.ui` (no backing `.vala`); `src/application.vala`+`src/window.ui` is 2 files/1 unit |
 | Upstream non-source units outside `src/` | `data/*.in`, `data/*.gschema.xml`, `data/icons/**`, `data/nautilus-extension/paper-clip.py`, `po/**` |
