@@ -78,7 +78,13 @@ Gem::Specification.new do |spec|
     *enumerate_package_files.call("exe"),
     # Extra package files configured by .structuredmerge/kettle-jem.yml
     *enumerate_package_glob.call(File.join(gemspec_root, "data/**/*")),
-    *enumerate_package_glob.call(File.join(gemspec_root, "po/**/*"))
+    *enumerate_package_glob.call(File.join(gemspec_root, "po/**/*")),
+    # Compiled message catalogues. `locale/` is gitignored and built by
+    # `rake gettext:mo:update`; the Rakefile makes `build`/`install`/
+    # `install:local` depend on that task so this glob is never empty when
+    # a gem actually gets packaged. Translations.LOCALE_DIR is what reads
+    # this back at runtime, gem install or Nix build alike.
+    *enumerate_package_glob.call(File.join(gemspec_root, "locale/**/*"))
   ]
   spec.rdoc_options += [
     "--title",

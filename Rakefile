@@ -308,6 +308,19 @@ rescue LoadError
   end
 end
 
+# A gem install has no Nix flake to compile locale/*.mo for it, and the
+# Nix build's msgfmt invocation reads po/ directly rather than through this
+# Rakefile — so without this, a `gem install paper-clip-rb` is untranslated
+# in all 18 languages even though po/ ships inside the gem. bundler/gem_tasks'
+# `build`/`install`/`install:local` task bodies evaluate the gemspec, and
+# the gemspec's `spec.files` globs `locale/**/*` (see paper-clip-rb.gemspec),
+# so the catalogues have to exist on disk before any of those bodies run.
+%w[build install install:local].each do |name|
+  next unless Rake::Task.task_defined?(name)
+
+  Rake::Task[name].enhance(["gettext:mo:update"])
+end
+
 ### DATA VALIDATION TASKS
 # Ports upstream's three declared `meson test` targets (data/meson.build),
 # which the flake builds and installs but never checks:

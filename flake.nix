@@ -295,6 +295,13 @@
             # Page-one rendering for the editor thumbnail, reached through its
             # introspection typelib.
             poppler
+            # `rake test:data`'s first two checks (desktop-file-validate,
+            # appstreamcli validate --no-net --explain) gate on
+            # find_executable0, the way upstream's meson.build gates the same
+            # two tools on find_program(..., required: false). Without these
+            # on PATH the checks silently skip instead of actually running.
+            pkgs.desktop-file-utils
+            pkgs.appstream
           ] ++ gtkStack;
 
           # Icons, GSettings schemas and the GTK portal all resolve through

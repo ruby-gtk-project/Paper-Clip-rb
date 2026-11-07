@@ -5,8 +5,8 @@
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
 | Port | `ruby` branch, round 5 |
 | Upstream tests | **3** |
-| Ported and verified passing | **1** |
-| Unverified (task written, validator never actually invoked here) | **2** |
+| Ported and verified passing | **3** |
+| Unverified | **0** |
 | Gaps | **0** named upstream-test gaps, plus 5 drive-coverage gaps on port-added behaviour — see `.reports/test-parity.md` and `.reports/component-parity.md` |
 | Port tests (Extra) | **130 examples, 0 failures** + a 283-check drive harness. This said 134 before this round; the per-file table below it has always summed to 130 (41+35+17+19+8+10), and nobody added the column before writing the header. See `.reports/accountability-ensurance.md`, Finding 2. |
 | Test command | `nix develop --command rspec --require ./spec/spec_helper.rb -Ilib -Ispec spec` |
@@ -39,26 +39,22 @@ definition that matters here, and this ledger previously undercounted them
 by 3 for four days and six commits after `.reports/test-parity.md` had
 already corrected it. See `.reports/accountability-ensurance.md`, Finding 2.
 
-## Suite: `data/meson.build` — 3 tests, 1 verified passing, 2 unverified
+## Suite: `data/meson.build` — 3 tests, 3 verified passing
 
 | # | Upstream test | What it asserts | Port | Status |
 |---|---|---|---|---|
-| 1 | `Validate desktop file` (`data/meson.build:12`) | the merged `.desktop` passes `desktop-file-validate` | `rake test:data`, gated on the tool's presence | **unverified** — the task is written, but `desktop-file-validate` has never actually run against this tree in any environment this round confirmed; see `.reports/accountability-ensurance.md`, Finding 3 |
-| 2 | `Validate appstream file` (`data/meson.build:25`) | the merged metainfo passes `appstreamcli validate --no-net --explain` | `rake test:data`, gated on the tool's presence | **unverified**, same reason |
+| 1 | `Validate desktop file` (`data/meson.build:12`) | the merged `.desktop` passes `desktop-file-validate` | `rake test:data` | **ported, runs, verified this round** — one hint about upstream's own `Categories` key (`GTK;Utility;Office;` names more than one main category), not a failure |
+| 2 | `Validate appstream file` (`data/meson.build:25`) | the merged metainfo passes `appstreamcli validate --no-net --explain` | `rake test:data` | **ported, runs, verified this round** — `Validation was successful: infos: 2, pedantic: 4` |
 | 3 | `Validate schema file` (`data/meson.build:38`) | `data/*.gschema.xml` passes `glib-compile-schemas --strict --dry-run` | `rake test:data` | **ported, runs, re-confirmed this round** |
 
 `rake test:data` merges `data/*.in` through `msgfmt --desktop`/`--xml` the
 same way `flake.nix`'s `installPhase` does, then runs the three validators
 against the merged files, each gated on `find_executable0` exactly as
-upstream gates them on `find_program(..., required: false)`. In this sandbox
-`glib-compile-schemas` is on `PATH` and the check runs and passes; neither
-`desktop-file-validate` nor `appstreamcli` is installed here, so those two
-print a skip note rather than silently claiming a pass — the same outcome
-`found()` returning false gives upstream's own `ninja test`. Installing
-`desktop-file-utils` and `appstream` into the devShell turns both into real,
-executed checks rather than gated no-ops; that is one `flake.nix` line each
-and is left as the next round's `nix` work rather than done here against a
-sandbox that cannot fetch them.
+upstream gates them on `find_program(..., required: false)`. `flake.nix`'s
+devShell now lists `pkgs.desktop-file-utils` and `pkgs.appstream` alongside
+`glib`, so all three checks run for real in this devShell — confirmed by
+running `nix develop --command rake test:data`, which executed all three and
+printed each tool's own verdict rather than a skip note.
 
 ## Extra — the port's own suites
 

@@ -163,10 +163,13 @@ tests are unported.~~ Closed this round: `rake test:data` runs
 each gated on the tool's presence the way upstream gates them on
 `find_program(..., required: false)`. See `TEST_PARITY.md`.
 
-From `.reports/translation-parity.md` (2): `po/pdf-metadata-editor.pot` was
-overwritten and the replacement drops 5 of the 96 keys; a gem-installed Paper
-Clip is untranslated in all 18 languages because the `.mo` files are compiled
-and installed only by the flake.
+From `.reports/translation-parity.md` (2): ~~`po/pdf-metadata-editor.pot` was
+overwritten and the replacement drops 5 of the 96 keys~~ (closed, see
+"Next run" item 5); ~~a gem-installed Paper Clip is untranslated in all 18
+languages because the `.mo` files are compiled and installed only by the
+flake~~ — closed this round: the gemspec and Rakefile changes in "Next run"
+item 5 mean `gem install paper-clip-rb` now carries all 18 compiled
+catalogues too.
 
 `.reports/accountability-ensurance.md` reports 0 scanner hits in `lib/`,
 `exe/` and `spec/`, and 4 findings in what the code *says* about its gaps.
@@ -249,9 +252,19 @@ In order:
 5. ~~Restore the 5 dropped `.pot` keys; install the `.mo` files from the gem
    as well as from the flake.~~ The `.pot` keys are restored this round
    (`rake gettext:pot` now reads `po/POTFILES` and extracts the four data
-   files by their own format; see `TRANSLATION_PARITY.md`). Installing the
-   `.mo` files from the gem itself, rather than only from the Nix build, is
-   still open.
-6. Install `desktop-file-utils` and `appstream` into the devShell so
+   files by their own format; see `TRANSLATION_PARITY.md`). The `.mo`
+   install is closed this round too: `paper-clip-rb.gemspec` globs
+   `locale/**/*` into `spec.files`, and the Rakefile makes
+   `build`/`install`/`install:local` depend on `gettext:mo:update` so
+   `locale/` exists on disk before the gemspec's file list is read.
+   Verified by deleting `locale/` and running `rake build --trace`: it
+   invoked `gettext:mo:update` first, and the resulting gemspec carried all
+   18 `.mo` files.
+6. ~~Install `desktop-file-utils` and `appstream` into the devShell so
    `rake test:data`'s first two checks run for real here instead of
-   skipping on a missing tool.
+   skipping on a missing tool.~~ Closed this round: both are in
+   `devShells.default.packages` in `flake.nix`, and running `rake test:data`
+   now actually executes `desktop-file-validate` (one hint, about
+   upstream's own `Categories` key) and `appstreamcli validate --no-net
+   --explain` (`Validation was successful: infos: 2, pedantic: 4`) instead
+   of warning "not found on PATH; skipping".
