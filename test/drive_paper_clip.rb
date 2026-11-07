@@ -366,6 +366,42 @@ GtkDriver.drive(application, shots: SHOTS, interval: 1500) do |d, app|
     d.check("nothing is dirty on a fresh load") { !manager.call.changed? }
   end
 
+  # --- The @loading re-entrancy guard --------------------------------------
+  #
+  # `update` sets row text from the document inside a @loading window
+  # precisely so that the rows' own notify::text handlers do not write that
+  # same text straight back and mark the document dirty. Loading a document
+  # whose fields already match what gets set never actually catches the
+  # guard doing anything — same text in, same text out, dirty either way.
+  # Forcing @loading true and then editing a row the way the open steps
+  # above do is what proves the guard, not merely the happy path around it:
+  # a value the document does not have lands in the row, and if the guard
+  # were gone that value would land on the document and mark it changed.
+  d.step("forcing @loading and editing a row proves the write-back guard") do
+    @loading_guard_title = doc.call.title
+    view.call.instance_variable_set(:@loading, true)
+    view.call.entry_rows[:title].text = "Spurious edit while @loading is set"
+  end
+
+  d.step("the guard held: the document was not touched and nothing went dirty") do
+    d.check("the row shows the spurious text") do
+      view.call.entry_rows[:title].text == "Spurious edit while @loading is set"
+    end
+    d.check("but the document's title did not follow it") do
+      doc.call.title == @loading_guard_title
+    end
+    d.check("and the manager never saw a change") { !manager.call.changed? }
+    view.call.instance_variable_set(:@loading, false)
+    view.call.entry_rows[:title].text = @loading_guard_title
+  end
+
+  d.step("the real write-back path still works once @loading is released") do
+    d.check("the row matches the document again") do
+      view.call.entry_rows[:title].text == @loading_guard_title
+    end
+    d.check("restoring the original text is not itself a change") { !manager.call.changed? }
+  end
+
   d.step("the editor renders") { d.shot("05-editor") }
 
   d.step("the thumbnail of page one arrived from Poppler") do
@@ -491,6 +527,47 @@ GtkDriver.drive(application, shots: SHOTS, interval: 1500) do |d, app|
     d.check("the row has no date") { view.call.modification_row.date.nil? }
     d.check("it says so") { view.call.modification_row.subtitle == "No date set" }
     d.check("the document has none either") { doc.call.modification_date.nil? }
+  end
+
+  # --- The @syncing re-entrancy guard --------------------------------------
+  #
+  # `date=` writes year/month/day onto the calendar so it displays what was
+  # just set, which is itself a GtkCalendar mutation and so itself fires
+  # "day-selected" — the exact signal a genuine user pick fires. Without
+  # @syncing, that write-back loop would read as the user re-picking the
+  # date it was just given and call on_change again, which is upstream's
+  # bug to avoid, not merely an implementation detail. Wrapping the row's
+  # own on_change (the one DocumentView wired to the document) in a spy, so
+  # both the assertion and the real write-through keep working, is what
+  # distinguishes "the sync path never calls back" from "nothing is wired
+  # to call back right now".
+  d.step("setting a date from outside the calendar does not re-enter on_change") do
+    row = view.call.modification_row
+    original_on_change = row.instance_variable_get(:@on_change)
+    @sync_calls = []
+    row.on_change { |date| @sync_calls << date; original_on_change&.call(date) }
+    row.date = Time.new(2030, 6, 15, 9, 0, 0)
+  end
+
+  d.step("the @syncing guard held: the calendar moved, but on_change did not fire") do
+    row = view.call.modification_row
+    d.check("the calendar actually synced to the assigned date") do
+      row.calendar.year == 2030 && row.calendar.month == 5 && row.calendar.day == 15
+    end
+    d.check("the row's own subtitle shows it too") { row.subtitle == row.date.strftime("%x") }
+    d.check("on_change was not re-entered by the calendar's own day-selected") { @sync_calls.empty? }
+  end
+
+  d.step("picking a day for real, outside the sync window, still fires on_change") do
+    view.call.modification_row.calendar.day = 20
+  end
+
+  d.step("the guard only suppresses the sync window, not genuine user picks") do
+    d.check("on_change fired exactly once for the real pick") { @sync_calls.length == 1 }
+    d.check("it carried the picked day") { @sync_calls.first.day == 20 }
+    d.check("the document followed the real pick, so write-through still works") do
+      doc.call.modification_date.day == 20
+    end
   end
 
   # --- Keywords -----------------------------------------------------------
@@ -1076,6 +1153,177 @@ GtkDriver.drive(application, shots: SHOTS, interval: 1500) do |d, app|
       pixbuf.pixels.any? { |byte| byte < 0x80 }
     end
     d.shot("19-big-thumbnail", survivor.window)
+  end
+
+  # --- Thumbnailer's two named error branches ------------------------------
+  #
+  # Nothing above forces either write Thumbnailer makes to fail, so
+  # ExportError and CacheError have never actually been raised by any spec
+  # or drive step — a renderer whose rescue clauses were deleted entirely
+  # would have passed every check up to this point just as well as the real
+  # one. Both are driven here by making the real write each guards against
+  # fail for real: a PNG path whose parent directory does not exist, and a
+  # tmp root that is a plain file instead of a directory. Private methods
+  # are reached with `send`, as `drop_overlay.send(:on_current_drop, ...)`
+  # already does above for the same reason — there is no public API that
+  # exercises the write in isolation from a real render.
+  d.step("a PNG write that cannot land raises Thumbnailer::ExportError") do
+    thumbnailer = PaperClip::Thumbnailer.default
+    surface = Cairo::ImageSurface.new(Cairo::FORMAT_ARGB32, 4, 4)
+    bad_path = File.join(Dir.mktmpdir("paper-clip-export-error"), "no-such-directory", "thumb.png")
+    thumbnailer.define_singleton_method(:create_cache_file) { |_basename| bad_path }
+    @export_error = nil
+    begin
+      thumbnailer.send(:export, surface, "thumb")
+    rescue PaperClip::Thumbnailer::ExportError => e
+      @export_error = e
+    ensure
+      thumbnailer.singleton_class.send(:remove_method, :create_cache_file)
+    end
+  end
+
+  d.step("ExportError, not a silent nil or the raw Cairo/SystemCallError") do
+    d.check("ExportError was actually raised") do
+      @export_error.is_a?(PaperClip::Thumbnailer::ExportError)
+    end
+    d.check("it is a Thumbnailer::Error, as CacheError is too") do
+      @export_error.is_a?(PaperClip::Thumbnailer::Error)
+    end
+    d.check("its message names the path that could not be written") do
+      @export_error.message.include?("thumb.png")
+    end
+    d.check("the thumbnailer survives to render the next page") do
+      thumbnailer = PaperClip::Thumbnailer.default
+      thumbnailer.max_size == PaperClip::DocumentThumbnail::MAX_SIZE
+    end
+  end
+
+  d.step("a cache directory that cannot be created raises Thumbnailer::CacheError") do
+    thumbnailer = PaperClip::Thumbnailer.default
+    blocked_root = File.join(Dir.mktmpdir("paper-clip-cache-error"), "blocked")
+    File.write(blocked_root, "a file where Thumbnailer expects a directory")
+    @blocked_root = blocked_root
+    original_tmpdir = Dir.tmpdir
+    Dir.define_singleton_method(:tmpdir) { blocked_root }
+    @cache_error = nil
+    begin
+      thumbnailer.send(:cache_directory)
+    rescue PaperClip::Thumbnailer::CacheError => e
+      @cache_error = e
+    ensure
+      Dir.define_singleton_method(:tmpdir) { original_tmpdir }
+    end
+  end
+
+  d.step("CacheError, distinct from ExportError, and Dir.tmpdir is back to normal") do
+    d.check("CacheError was actually raised") { @cache_error.is_a?(PaperClip::Thumbnailer::CacheError) }
+    d.check("it is a Thumbnailer::Error too") { @cache_error.is_a?(PaperClip::Thumbnailer::Error) }
+    d.check("its message names the path it could not create") do
+      @cache_error.message.include?("blocked")
+    end
+    d.check("ExportError and CacheError are distinct") do
+      !@cache_error.is_a?(PaperClip::Thumbnailer::ExportError) &&
+        !@export_error.is_a?(PaperClip::Thumbnailer::CacheError)
+    end
+    d.check("Dir.tmpdir was restored, not left pointing at the blocked path") do
+      Dir.tmpdir != @blocked_root
+    end
+  end
+
+  # --- Window#proceed_with_state's three call sites ------------------------
+  #
+  # Two of the three are already reached above by name: `saved`, when the
+  # dialog's Save response actually writes something out ("closing the
+  # first window with unsaved work raises the dialog too" through "and the
+  # window went on closing"), and the Cancel branch, which deliberately
+  # never reaches proceed_with_state and leaves the window open
+  # ("cancelling the dialog abandons the open and keeps the edit"). The
+  # other two — the Discard response's direct call inside
+  # on_warning_response, and save_selected's direct call when every row
+  # was unticked before Save was pressed — are driven here. Each gets a
+  # window of its own, opened with the new-window action, so neither close
+  # risks taking the application's last window — and this run — down with
+  # it.
+  d.step("a fresh window opens for the Discard path") do
+    app.app.activate_action("new-window", nil)
+  end
+
+  d.step("it loads a document and gets an edit worth discarding") do
+    @discarding = app.windows.last
+    @discarding.open_command_line_file(file_for(CLASSIC))
+  end
+
+  d.step("the edit is in, so closing raises the dialog") do
+    @discarding.document_view.entry_rows[:title].text = "Discard Me"
+    d.check("there is something to discard") { @discarding.document_manager.changed? }
+    @discard_close_blocked = @discarding.window.signal_emit("close-request")
+  end
+
+  d.step("the close was blocked and the dialog is up") do
+    d.check("close-request was refused") { @discard_close_blocked == true }
+    d.check("the save-changes dialog is showing") do
+      @discarding.window.visible_dialog.is_a?(Adwaita::AlertDialog)
+    end
+  end
+
+  d.step("answering Discard calls proceed_with_state directly, with nothing saved") do
+    answer.call(@discarding, "discard")
+  end
+
+  d.step("the window closed without writing the edit back") do
+    d.check("the dialog went") { @discarding.window.visible_dialog.nil? }
+    d.check("the window closed") { !Gtk::Window.list_toplevels.include?(@discarding.window) }
+    d.check("the application dropped it from its list") { !app.windows.include?(@discarding) }
+    d.check("the edit never reached the file") { !File.binread(CLASSIC).include?("Discard Me") }
+  end
+
+  d.step("a second fresh window opens for the empty-selection Save path") do
+    app.app.activate_action("new-window", nil)
+  end
+
+  d.step("it loads a document and gets an edit of its own") do
+    @unselecting = app.windows.last
+    @unselecting.open_command_line_file(file_for(CLASSIC))
+  end
+
+  d.step("the edit is in, so closing raises the dialog again") do
+    @unselecting.document_view.entry_rows[:title].text = "Never Saved"
+    d.check("there is something unsaved") { @unselecting.document_manager.changed? }
+    @unselect_close_blocked = @unselecting.window.signal_emit("close-request")
+  end
+
+  d.step("the dialog lists the one document, ticked by default") do
+    d.check("close-request was refused") { @unselect_close_blocked == true }
+    d.check("the save-changes dialog is showing") do
+      @unselecting.window.visible_dialog.is_a?(Adwaita::AlertDialog)
+    end
+    # There is no public reader for it — Window keeps it only to present and
+    # answer it — but it has to be the real dialog's own rows, not a fresh
+    # DocumentRow of our own, or unticking it would not touch what Save
+    # actually reads when it is pressed below.
+    @unselect_dialog = @unselecting.instance_variable_get(:@save_changes_dialog)
+    d.check("its one row is ticked by default") { @unselect_dialog.rows.all?(&:selected?) }
+  end
+
+  # Unticking the only document before pressing Save is what makes
+  # save_selected's `managers` empty — the third call site:
+  # `save_selected` calls `proceed_with_state` directly rather than saving
+  # anything, because nothing is left ticked to save.
+  d.step("unticking the only document empties what Save will act on") do
+    @unselect_dialog.rows.each { |row| row.check_button.active = false }
+    d.check("selected_managers is now empty") { @unselect_dialog.selected_managers.empty? }
+  end
+
+  d.step("Save with nothing ticked calls proceed_with_state directly") do
+    answer.call(@unselecting, "save")
+  end
+
+  d.step("the window closed with nothing written, because nothing was ticked") do
+    d.check("the window closed") { !Gtk::Window.list_toplevels.include?(@unselecting.window) }
+    d.check("the application dropped it from its list") { !app.windows.include?(@unselecting) }
+    d.check("the edit never reached the file, since nothing was selected to save") do
+      !File.binread(CLASSIC).include?("Never Saved")
+    end
   end
 
   # --- Refusals and the quit path -----------------------------------------

@@ -123,37 +123,50 @@ port equivalent in the Rakefile or `spec/`.
 
 ## Open gaps
 
-18 gaps have been logged against this ledger across seven audit rounds; 13
-are closed and struck through below rather than deleted, so the ledger still
-shows what was owed and when. **5 are still open**, surfaced in round 6 and
-never before added here as numbered items — they lived only in this file's
-"Next run" prose and in `.reports/component-parity.md` and
-`.reports/test-parity.md`, so a reader who stopped at this section's old "13
-gaps, all struck through" would have concluded nothing was outstanding. That
-was wrong of whoever wrote this section that way; the open gaps are listed
-as gaps here now, not just as "next run" items. clean=false.
+18 gaps have been logged against this ledger across eight audit rounds; all
+18 are now closed and struck through below rather than deleted, so the
+ledger still shows what was owed and when.
 
-From `.reports/component-parity.md` and `.reports/test-parity.md`, still
-open as of round 7 (5):
+From `.reports/component-parity.md` and `.reports/test-parity.md`, closed
+this round (5):
 
-14. `Thumbnailer::ExportError` is never driven — no spec and no drive step
+14. ~~`Thumbnailer::ExportError` is never driven — no spec and no drive step
     forces a PNG export write to fail and checks the error surfaces to the
-    user rather than crashing or showing a blank thumbnail.
-15. `Thumbnailer::CacheError` is never driven — same, for a failed cache
-    read-back.
-16. `DocumentView`'s `@loading` re-entrancy guard is never driven into
+    user rather than crashing or showing a blank thumbnail.~~ Closed this
+    round: `test/drive_paper_clip.rb` points `create_cache_file` at a path
+    whose parent directory does not exist and asserts `ExportError` is
+    raised with a message naming the file. Driving it found a real bug, not
+    just an untested path — `write_to_png`'s actual write failure is
+    `Cairo::WriteError`, which is a Ruby `IOError`, not a `Cairo::Error`; the
+    `rescue Cairo::Error, SystemCallError` in `thumbnailer.rb#export` let it
+    straight through unrescued. Fixed by rescuing `IOError` too.
+15. ~~`Thumbnailer::CacheError` is never driven — same, for a failed cache
+    read-back.~~ Closed this round: the drive harness points `Dir.tmpdir` at
+    a path that is a plain file, so `FileUtils.mkdir_p` underneath it fails
+    with `Errno::ENOTDIR`, and asserts `CacheError` is raised and that
+    `Dir.tmpdir` is restored afterward.
+16. ~~`DocumentView`'s `@loading` re-entrancy guard is never driven into
     firing — nothing loads a document while also editing a field fast
     enough to prove the write-back loop it exists to prevent is actually
-    prevented.
-17. `DateRow`'s `@syncing` guard is never driven the same way.
-18. `Window#proceed_with_state` is never driven — the method exists and is
+    prevented.~~ Closed this round: the drive harness forces `@loading`
+    true directly, edits a row to a value the document does not have, and
+    asserts neither the document nor the dirty flag followed it — then
+    releases the guard and confirms the real write-back path still works.
+17. ~~`DateRow`'s `@syncing` guard is never driven the same way.~~ Closed
+    this round: the harness wraps the row's own `on_change` in a spy,
+    assigns a date from outside (which re-points the calendar and so fires
+    its own `day-selected`), and asserts the spy was not re-entered — then
+    picks a day for real and asserts it was, exactly once.
+18. ~~`Window#proceed_with_state` is never driven — the method exists and is
     called from three sites in `window.rb`, but no spec or drive step
     reaches any of the three and checks the save-or-discard decision
-    actually blocks the quit until it is made.
-
-None of these five is a decision anyone took. They are behaviour upstream
-has and the port's code claims to replicate, that nobody has ever watched
-run.
+    actually blocks the quit until it is made.~~ Closed this round: the
+    `saved` call site was already reached by the existing Save-and-close
+    steps; the harness now also opens a window, edits it, blocks the close,
+    answers Discard (the `on_warning_response` call site) and confirms the
+    window closes with the edit never written, and separately unticks the
+    one document in the save-changes dialog before pressing Save (the
+    `save_selected` empty-selection call site) and confirms the same.
 
 From `.reports/component-parity.md` (5):
 
@@ -173,11 +186,13 @@ From `.reports/component-parity.md` (5):
    code actually ran.
 5. ~~Most of the port has still not been observed running.~~ Closed as of
    the drive harness reaching the whole app: `test/drive_paper_clip.rb` now
-   runs 283 checks across 101 steps and 19 screenshots, reaching every file
+   runs 318 checks across 124 steps and 19 screenshots, reaching every file
    under `lib/paper_clip/` — all 15 widget units, not only the editor page,
-   and, as of round 5, the PNG-cache branch of `Thumbnailer` with a fixture
-   that actually clears its threshold. `COMPONENT_PARITY.md` and
-   `TEST_PARITY.md` carry the current numbers.
+   the PNG-cache branch of `Thumbnailer` with a fixture that actually
+   clears its threshold (round 5), and, as of this round, `Thumbnailer`'s
+   `ExportError`/`CacheError` domains and the `@loading`/`@syncing`/
+   `proceed_with_state` guards. `COMPONENT_PARITY.md` and `TEST_PARITY.md`
+   carry the current numbers.
 
 From `.reports/component-identification.md` (3): ~~`DocumentThumbnail` and
 `Thumbnailer` have no port unit; `*.service.in` has no port unit.~~ All three
@@ -272,12 +287,16 @@ In order:
     round 5: `PdfFixtures.big` (a 600×600 page with a filled rectangle on
     it) crosses the branch's own threshold, and the harness reads the PNG
     `write_to_png` wrote and checks for a pixel darker than the white
-    backing rectangle. `ExportError`/`CacheError` are still not driven,
-    since nothing in the harness forces either write to fail.
-3. The three widget-level guards `TEST_PARITY.md` lists as owed
+    backing rectangle. `ExportError`/`CacheError` were still not driven at
+    that point.
+2b. ~~Drive `Thumbnailer::ExportError` and `CacheError`.~~ Done this round
+    — see "Open gaps" 14 and 15. Finding a real rescue bug while doing it
+    (`Cairo::WriteError` is an `IOError`, not a `Cairo::Error`) is the
+    reason this item was worth doing rather than deferring again.
+3. ~~The three widget-level guards `TEST_PARITY.md` lists as owed
    (`@loading` in `document_view.rb`, `@syncing` in `date_row.rb`,
-   `proceed_with_state` in `window.rb`) — still open; the harness now has
-   the machinery to drive them, it just has not been pointed at them yet.
+   `proceed_with_state` in `window.rb`).~~ Done this round — see "Open
+   gaps" 16, 17 and 18.
 4. ~~Screenshots, which nothing has produced yet.~~ Done: 19, taken by the
    drive harness.
 5. ~~Restore the 5 dropped `.pot` keys; install the `.mo` files from the gem

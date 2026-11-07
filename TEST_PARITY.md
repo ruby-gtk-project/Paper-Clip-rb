@@ -3,12 +3,12 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` branch, round 5 |
+| Port | `ruby` branch, round 8 |
 | Upstream tests | **3** |
 | Ported and verified passing | **3** |
 | Unverified | **0** |
-| Gaps | **0** named upstream-test gaps, plus 5 drive-coverage gaps on port-added behaviour — see `.reports/test-parity.md` and `.reports/component-parity.md` |
-| Port tests (Extra) | **130 examples, 0 failures** + a 283-check drive harness. This said 134 before this round; the per-file table below it has always summed to 130 (41+35+17+19+8+10), and nobody added the column before writing the header. See `.reports/accountability-ensurance.md`, Finding 2. |
+| Gaps | **0** named upstream-test gaps, **0** drive-coverage gaps on port-added behaviour — the 5 that stood as of round 7 (`Thumbnailer::ExportError`/`CacheError`, `@loading`, `@syncing`, `proceed_with_state`) are all closed this round; see `PORTING.md`'s "Open gaps" 14–18 |
+| Port tests (Extra) | **130 examples, 0 failures** + a 318-check drive harness. This said 134 before round 7; the per-file table below it has always summed to 130 (41+35+17+19+8+10), and nobody added the column before writing the header. See `.reports/accountability-ensurance.md`, Finding 2. |
 | Test command | `nix develop --command rspec --require ./spec/spec_helper.rb -Ilib -Ispec spec` |
 | Data validation command | `nix develop --command rake test:data` |
 
@@ -88,14 +88,14 @@ Two things found by writing this suite rather than by reading the code:
   first draft of the spec asserted that `-4` revoked printing, and the code
   was right.
 
-### `test/drive_paper_clip.rb` — 283 checks, 101 steps, 19 screenshots
+### `test/drive_paper_clip.rb` — 318 checks, 124 steps, 19 screenshots
 
 The harness builds the real application under `xvfb-run`, opens the real
 windows and dialogs, loads real PDFs off disk including a genuinely AES-128
 encrypted one, and asserts the observable result of each interaction. See
 `COMPONENT_PARITY.md` for what it did and did not reach.
 
-**Closed this round:** `Thumbnailer#load_scaled`'s PNG-cache branch and the
+**Closed in round 5:** `Thumbnailer#load_scaled`'s PNG-cache branch and the
 renderer's actual output were previously unexercised by any committed
 fixture — every PDF the suite built was 200×200, far under the 306,250px
 threshold the branch requires. `PdfFixtures.big` is a 600×600 page carrying
@@ -105,20 +105,42 @@ back out of `$TMPDIR/thumbnails/`, and checks for a pixel darker than the
 white backing rectangle — proving the branch renders the document rather
 than drawing nothing.
 
-## Owed, and why it is not written
+**Closed this round:** the five checks the previous round's "Owed" section
+below named. 35 of the 318 checks and 23 of the 124 steps are new this
+round:
 
-Three checks from an earlier brief are still missing, all widget-level and
-all blocked the same way:
+- **`Thumbnailer::ExportError`** — `create_cache_file` is pointed at a path
+  whose parent directory does not exist, so `write_to_png` fails for real.
+  Driving this found that the rescue clause never worked: `write_to_png`'s
+  actual failure is `Cairo::WriteError`, a Ruby `IOError`, not a
+  `Cairo::Error`, so `thumbnailer.rb#export`'s
+  `rescue Cairo::Error, SystemCallError` let it straight through. Fixed by
+  also rescuing `IOError`.
+- **`Thumbnailer::CacheError`** — `Dir.tmpdir` is pointed at a path that is
+  a plain file, so `FileUtils.mkdir_p` underneath it fails with
+  `Errno::ENOTDIR`; `CacheError` is asserted, and so is `Dir.tmpdir` being
+  restored afterward.
+- **`DocumentView`'s `@loading` guard** — forced true directly, then a row
+  is edited to a value the open document does not have; neither the
+  document nor the dirty flag follows it while the guard holds, and the
+  real write-back path is confirmed to still work once it is released.
+- **`DateRow`'s `@syncing` guard** — the row's own `on_change` is wrapped in
+  a spy; assigning a date from outside re-points the calendar, which fires
+  its own `day-selected`, and the spy is asserted not to have been
+  re-entered. A real pick afterward is asserted to fire the spy exactly
+  once, proving the guard suppresses only the sync window.
+- **`proceed_with_state`'s three call sites** — the `saved` site was
+  already reached by the existing Save-and-close steps. The harness now
+  also answers Discard on a window with unsaved work and confirms it closes
+  with nothing written, and separately unticks the one document in the
+  save-changes dialog before pressing Save and confirms the same for the
+  empty-selection branch of `save_selected`.
 
-| Check | Why it is not written |
-|---|---|
-| the `@loading` re-entrancy guard (`document_view.rb`) | needs an `Adwaita::EntryRow` to emit `notify::text` from inside the drive harness, not just a headless construction |
-| the `@syncing` calendar guard (`date_row.rb`) | needs a `Gtk::Calendar` to emit `day-selected` the same way |
-| `proceed_with_state` (`window.rb`) | needs the save-changes dialog driven through all three of its choices in one run |
+## Owed
 
-Each is reachable now that `test/drive_paper_clip.rb` exists and runs real
-widgets under `xvfb-run`; none of the three is driven by it yet. They are
-owed rather than present because a spec that has never run is not evidence.
+Nothing. The three checks an earlier brief named and the two `Thumbnailer`
+error domains are all driven as of this round; see "Closed this round"
+above and `PORTING.md`'s "Open gaps" 14–18.
 
 ## Harness
 

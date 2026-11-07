@@ -138,10 +138,17 @@ module PaperClip
         SCALE_STEPS.find { |factor| image_area(surface) * factor >= max_area } || SCALE_LIMIT
       end
 
+      # Cairo::WriteError — the exception `write_to_png` actually raises when
+      # the write itself fails, e.g. a missing parent directory or a full
+      # disk — is a Ruby IOError, not a Cairo::Error: the cairo-ruby bindings
+      # give each libcairo status code its own class, and only `WriteError`
+      # and `ReadError` are also IOErrors. `Cairo::Error` alone let a real
+      # write failure straight through unrescued; nothing drove this path
+      # until it was forced, which is how that went unnoticed.
       def export(surface, basename)
         create_cache_file(basename).tap do |save_path|
           surface.write_to_png(save_path)
-        rescue Cairo::Error, SystemCallError => e
+        rescue Cairo::Error, IOError, SystemCallError => e
           raise ExportError, "Failed to export #{save_path}: #{e.message}"
         end
       end

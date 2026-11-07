@@ -3,10 +3,10 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` branch, round 5 |
+| Port | `ruby` branch, round 8 |
 | Units compared | 23 |
 | Units with no port file at all | **0** (was 2) |
-| Driven (signals actually fired) | the whole app — `test/drive_paper_clip.rb`: **283 of 283 checks passed, `DRIVE OK`**, all 15 widget units reached, not only the editor page — including, as of this round, the PNG-cache branch of `Thumbnailer` |
+| Driven (signals actually fired) | the whole app — `test/drive_paper_clip.rb`: **318 of 318 checks passed, `DRIVE OK`**, all 15 widget units reached, not only the editor page — including the PNG-cache branch of `Thumbnailer` (round 5) and, as of this round, `Thumbnailer`'s `ExportError`/`CacheError` domains and the `@loading`/`@syncing`/`proceed_with_state` guards |
 | Screenshots | **19**, under `tmp/shots/` |
 
 The file map is in `PORTING.md`. Costs and open questions are in
@@ -131,6 +131,16 @@ over GVFS now saves back to the same URI upstream's
 (`window.vala:211`), rather than to whatever local path GIO happened to
 report.
 
+**`proceed_with_state` driven as of this round.** It is called from three
+sites — `saved` (after a real save), `on_warning_response`'s Discard branch,
+and `save_selected` when every row was unticked before Save was pressed —
+and the existing Save-and-close steps already reached the first. The drive
+harness now also opens a window, edits it, lets `close-request` block on
+the unsaved-changes dialog, answers Discard, and confirms the window closes
+with the edit never written back; separately, it unticks the one document
+in the dialog before pressing Save and confirms the same, which is the
+third call site.
+
 Open on this unit:
 
 - **Three failure paths log where round 1 toasted.** A dropped non-PDF, a
@@ -188,7 +198,11 @@ The two-way binding remains a correspondence: upstream's `BindingGroup` is
 `load_rows` and pulls with `notify::text` behind a `@loading` guard. Seven of
 the eight are located, the eighth (`original-file` → `file_launcher.file`) has
 no counterpart because the launcher is rebuilt per call, and the window title
-is now a ninth push rather than a bind.
+is now a ninth push rather than a bind. **The `@loading` guard itself is
+driven as of this round**: `test/drive_paper_clip.rb` forces it true, edits
+a row to a value the open document does not have, and asserts neither the
+document nor the dirty flag followed — then releases the guard and confirms
+the real write-back path still works.
 
 ## Unit: page preview — `src/DocumentThumbnail.vala` → `document_thumbnail.rb`
 
@@ -218,12 +232,12 @@ Driven: a 400×600 page rendered to a `GtkRenderNodePaintable` of 350×525.
 | memory format from byte order | `B8G8R8A8_PREMULTIPLIED` / `A8R8G8B8_PREMULTIPLIED`, cached | same, cached | parity |
 | surface allocated before the render | 1 | 1 | parity: `Cairo.ImageSurface` ARGB32 at the page's truncated size |
 | render off the main loop | ThreadPool with one worker | `ThreadManager`'s one worker, with the GVL released across `Poppler::Page#render` | correspondence: one job covers render and load where upstream awaits each separately. `FINDINGS.md` §1 on the GVL |
-| big page → downscaled PNG | `write_to_png`, then `from_file_at_size` | same | **parity, driven as of round 5**: `PdfFixtures.big` is a 600×600 page (`360,000px`, clearing the `350² × 2.5 = 306,250` threshold) with an actual filled rectangle on it, not a blank one, and `test/drive_paper_clip.rb` loads it, reads the PNG back out of `$TMPDIR/thumbnails/` and checks a pixel darker than the white backing rectangle is in it — not just that the file exists. `write_to_png`, the scale-step loop, `from_file_at_size`, and the export path are all driven; `ExportError`/`CacheError` still are not, since nothing forces either write to fail |
+| big page → downscaled PNG | `write_to_png`, then `from_file_at_size` | same | **parity, driven as of round 5**: `PdfFixtures.big` is a 600×600 page (`360,000px`, clearing the `350² × 2.5 = 306,250` threshold) with an actual filled rectangle on it, not a blank one, and `test/drive_paper_clip.rb` loads it, reads the PNG back out of `$TMPDIR/thumbnails/` and checks a pixel darker than the white backing rectangle is in it — not just that the file exists. `write_to_png`, the scale-step loop, `from_file_at_size`, and the export path are all driven; `ExportError`/`CacheError` are driven too as of this round, see the row below |
 | small page → memory texture | `Gdk.MemoryTexture` over a copy of the surface bytes | same; `surface.data` *is* the copy | parity. Driven |
 | step loop for the scale factor | 0.1 up by 0.1 while below 0.8 | same seven steps, else 0.8 | parity, including upstream multiplying the pixel count by the factor rather than its square |
 | cache path | `$TMPDIR/thumbnails/<basename>.png` | same | parity |
 | cache directory mode | `0777` | `0700` | **deliberate divergence**: a world-writable directory in a shared `/tmp`, named after the open document, is one another user can replace between the write and the read. `Document`'s copies directory is `0700` for the same reason |
-| `ThumbnailError.FAILED_EXPORT` / `FAILED_TO_CACHE` | 2 | 2 | parity: `Thumbnailer::ExportError` / `CacheError` |
+| `ThumbnailError.FAILED_EXPORT` / `FAILED_TO_CACHE` | 2 | 2 | **parity, driven as of this round**: `test/drive_paper_clip.rb` points `create_cache_file` at a path with a missing parent directory and asserts `ExportError`, then points `Dir.tmpdir` at a plain file and asserts `CacheError`. Driving the first found a real bug — `write_to_png`'s actual failure, `Cairo::WriteError`, is a Ruby `IOError` and not a `Cairo::Error`, so `export`'s `rescue Cairo::Error, SystemCallError` never caught it; fixed by rescuing `IOError` too |
 | pre-creating the empty cache file | 1 | 0 | correspondence: `write_to_png` creates it a line later; only the directory has to exist first |
 
 ## Unit: date row — `src/DateRow.vala` + `src/gtk/date-row.ui` → `date_row.rb`
@@ -242,6 +256,16 @@ upstream's `on_day_selected` stores `calendar.get_date()`, which is midnight,
 so touching the calendar discards the time of day the PDF recorded. The port
 keeps it. This is a divergence in a user-visible value and it is worth
 proposing upstream.
+
+The `@syncing` re-entrancy guard is driven as of this round: `date=` writes
+year/month/day onto the calendar, which is itself a mutation and so itself
+fires `day-selected` — the same signal a real pick fires. `@syncing` is
+what stops that from reading as the user re-picking the date it was just
+given. `test/drive_paper_clip.rb` wraps the row's own `on_change` in a spy,
+assigns a date from outside, and asserts the spy was not called; it then
+picks a day for real and asserts the spy fired exactly once, with the
+picked day — so the guard is shown to suppress only the sync window, not
+genuine use.
 
 ## Unit: details list — `src/DetailsList.vala` + `src/gtk/details-list.ui` → `details_list.rb`
 
@@ -453,13 +477,13 @@ Verified end to end, not assumed: `LANGUAGE=de` returns
 | Units compared | 23 |
 | Upstream units with no port file | 0 |
 | Distinct behaviour gaps named above | 0 (was 1 — saving to a path rather than a URI, closed this round) |
-| Driven but unverified branches | 2 — `Thumbnailer`'s `ExportError`/`CacheError` domains, plus `window.rb`'s `proceed_with_state` and `date_row.rb`'s `@syncing` guard are never named by the drive harness; see `.reports/component-parity.md` (round 6) |
+| Driven but unverified branches | 0 — the two `Thumbnailer` error domains and the three re-entrancy guards (`@loading`, `@syncing`, `proceed_with_state`) all closed this round; see "Open gaps" 14–18 in `PORTING.md` |
 | Message keys | 96 / 96 in source; `rake gettext:pot` now extracts all 96 (was 91 before this round — see `TRANSLATION_PARITY.md`) |
-| Signals driven | the whole app, not only the editor page: `test/drive_paper_clip.rb` reaches all 15 widget units, 283 of 283 checks passed, including the PNG-cache branch of `Thumbnailer` as of round 5 |
+| Signals driven | the whole app, not only the editor page: `test/drive_paper_clip.rb` reaches all 15 widget units, 318 of 318 checks passed, including the PNG-cache branch of `Thumbnailer` as of round 5 and the two error branches and three re-entrancy guards as of this round |
 | Screenshots taken | **19**, under `tmp/shots/` |
 
 Driving the app for the first time, in an earlier round, cost three
 `NoMethodError`s that this table had scored as parity — see `FINDINGS.md` §8.
-Every unit has since been driven at least once; `TEST_PARITY.md`'s "Owed"
-section names the three widget-level guards still not exercised by name
-rather than by construction.
+Every unit has since been driven at least once; the three widget-level
+guards `TEST_PARITY.md` once listed as "Owed" are now exercised by name, not
+just by construction, and are driven to fire this round.
