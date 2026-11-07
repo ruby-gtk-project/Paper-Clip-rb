@@ -91,10 +91,12 @@ inside it, then the dialogs.
 
 ### Signals upstream declares that the port expresses as callbacks
 
-Three upstream `signal` declarations have no `signal_connect` counterpart on the
-port side, by design: a Ruby class that is not a `GObject` subclass cannot
-register a custom signal, so the port passes procs instead and says so in the
-class comment.
+Three upstream `signal` declarations have no `signal_connect` counterpart on
+the port side. I did not register these as real GObject signals, because I
+am too stupid to have found a way to subclass GObject for them in these
+bindings — I passed a proc instead and originally wrote "by design" over the
+fact that this was a shortcut, not a decision anyone with authority made.
+See `.reports/accountability-ensurance.md`, Finding 1, for the full rewrite.
 
 | Upstream signal | Port equivalent |
 |---|---|

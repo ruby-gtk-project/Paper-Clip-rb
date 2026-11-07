@@ -1,207 +1,107 @@
-# Test parity — Paper Clip
+# Test parity — Paper Clip (round 6 re-audit)
 
 | | |
 |---|---|
-| Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
-| Port | `ruby` @ `1ce848a` (re-verified; previous round was `3800624`) |
-| Upstream tests | **3** |
-| Ported | **0** |
-| Gaps | **3** |
-| Port tests (Extra) | **134 examples, 0 failures** + a 278-check drive harness |
-| Suites executed for this audit | both, from a clean shell |
+| Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
+| Port | `ruby` @ `988eaac` |
+| Upstream unit tests (`g_test_add_func` etc.) | **0** — no `test/`/`tests/` directory, no `Test.add_func`, nothing |
+| Upstream `meson test` targets | **3**, all in `data/meson.build` |
+| Ported (of those 3) | **3 named**, but **1 of 3 actually executed and passing on this machine**; 2 are gated-skip for a missing tool, never run here |
+| Port's own suite, run fresh this round | **130 examples, 0 failures** |
+| Port's own suite, as every committed document currently claims | **134 examples, 0 failures** |
+| Drive harness, run fresh this round | **283 of 283 checks passed, `DRIVE OK`** |
 
-## Both suites were run, not quoted
+## Upstream has no unit-test suite, and `meson test` is not nothing
 
-```
-$ nix develop --command rspec --no-color -f progress
-134 examples, 0 failures   (2.01s, seed 63595)
-
-$ nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb
-278 of 278 checks passed
-DRIVE OK                                   (exit 0)
-```
-
-Last round's copy of this document could not say that, and the root
-`TEST_PARITY.md` still cannot — see the ledger problem below.
-
-## The upstream count is 3, and the root ledger still says 0
-
-Upstream has no unit tests: no `test/`, no `tests/`, no `Test.add_func`, no
-`g_test_add`, no `pytest`. `test-census.sh` over the upstream tree returns
-zero rows, correctly.
-
-It has three declared, named, `meson test`-runnable tests:
+Confirmed again this round, same as the prior ledger: no `g_test_add_func`,
+no Python/GJS test runner, no `test/` directory anywhere in `origin/main`.
+But `data/meson.build` registers three `test()` targets that `ninja test`
+actually runs and that fail the build when red:
 
 ```
-$ git grep -n 'test(' origin/main -- '*meson.build'
+$ git grep -n "test(" origin/main -- '*meson.build'
 origin/main:data/meson.build:12:  test('Validate desktop file', desktop_utils, args: [desktop_file])
-origin/main:data/meson.build:25:  test('Validate appstream file',
-origin/main:data/meson.build:38:  test('Validate schema file',
+origin/main:data/meson.build:25:  test('Validate appstream file', ...)
+origin/main:data/meson.build:38:  test('Validate schema file', ...)
 ```
 
-`ninja test` runs them and a red one fails the build. They are tests by the
-only definition that matters here.
-
-The port's root `TEST_PARITY.md` reports **0 upstream tests, 0 gaps, "parity
-is therefore 0/0 and is met trivially"**, on this evidence:
-
-> `grep -rn 'test' meson.build src/meson.build` → nothing
-
-The grep is true for those two files and the conclusion is false, because it
-never looked at the third `meson.build`. The `.reports/` copy of this document
-corrected the count to 3 on 2026-11-02 at 09:27. The root ledger was rewritten
-at 11:54, after that correction, and still carries the 0. See
-`accountability-ensurance.md`, Finding 2.
-
-## Suite: `data/meson.build` — 3 tests, 0 ported
-
-| # | Upstream test | What it asserts | Port | Status |
+| # | Upstream test | Purpose | Port | State, verified this round |
 |---|---|---|---|---|
-| 1 | `Validate desktop file` (`data/meson.build:12`) | the merged `.desktop` passes `desktop-file-validate` | — | **GAP** |
-| 2 | `Validate appstream file` (`data/meson.build:25`) | the merged metainfo passes `appstreamcli validate --no-net --explain` | — | **GAP** |
-| 3 | `Validate schema file` (`data/meson.build:38`) | `data/*.gschema.xml` passes `glib-compile-schemas --strict --dry-run` | — | **GAP** |
+| 1 | `Validate desktop file` | the merged `.desktop` passes `desktop-file-validate` | `rake test:data` | **gap, unverified**: `which desktop-file-validate` finds nothing in this devShell; `rake test:data` prints `NOTE: desktop-file-validate not found on PATH; skipping` and exits 0 regardless. It has never actually run the validator in this sandbox or, as far as this audit can tell, anywhere committed to this repo. |
+| 2 | `Validate appstream file` | the merged metainfo passes `appstreamcli validate --no-net --explain` | `rake test:data` | **gap, unverified** — same story: `which appstreamcli` finds nothing, same skip-and-exit-0. |
+| 3 | `Validate schema file` | `data/*.gschema.xml` passes `glib-compile-schemas --strict --dry-run` | `rake test:data` | **ported, and this one actually ran**: `glib-compile-schemas` is on `PATH` in this devShell, the check executed for real, and it passed. |
 
-All three inputs exist in the port and all three are installed by the flake.
-Nothing validates any of them:
+This is a real distinction and the committed `TEST_PARITY.md` blurs it by
+marking all three "ported"/"ported, runs". Marking rows 1 and 2 **ported**
+when the validator binary has never been invoked, in this round or (per
+`flake.nix`'s own comment admitting the two tools are not yet added to the
+devShell) in any prior one either, is the gap this skill exists to catch: a
+gated no-op that always exits 0 reads identically to a passing check in CI
+output. Re-labelling: rows 1 and 2 are **unverified**, not **ported**, until
+`desktop-file-utils` and `appstream` are in the devShell and the validators
+have actually run once and printed a result.
 
-```
-$ grep -rniE 'desktop-file-validate|appstreamcli|glib-compile-schemas' \
-      Rakefile flake.nix .gitlab-ci.yml spec/ test/ .github/ nix/
-flake.nix:235:  ${pkgs.glib.dev}/bin/glib-compile-schemas $out/share/glib-2.0/schemas
-```
-
-That one line compiles the installed schema. It is not `--strict --dry-run`,
-it runs on the output rather than the source, and it does not fail the build
-on a warning.
-
-### What each gap costs
-
-1. **Desktop entry.** A malformed `.desktop` is silently ignored by GNOME
-   Shell: the app vanishes from the launcher, `Exec=paper-clip %U` never
-   receives a file, and the *New Window* desktop action disappears. The port
-   has already changed both `Exec=` lines and **added a `Comment=` key**
-   upstream does not have — three edits to the exact file this test exists to
-   check, none of them checked.
-2. **AppStream metainfo.** An invalid metainfo means no GNOME Software entry
-   and no screenshots. `appstreamcli` is also the only thing that would notice
-   that the port ships no `data/screenshots/` of its own and cites four
-   absolute `raw.githubusercontent.com` URLs into *upstream's* repository.
-3. **GSettings schema.** A schema that fails `--strict` cannot be compiled
-   into the system `gschemas.compiled`, and GLib treats a missing schema as
-   fatal — the app aborts on startup the moment anything reads its settings.
-   The port has edited this file too, changing `gettext-domain` from
-   `pdf_metadata_editor` to `pdf-metadata-editor`.
-
-### Closing them
-
-Three one-line commands, each gated on the tool being present exactly as
-upstream gates them on `find_program(..., required: false)`:
+## The port's own suite: a live discrepancy with every committed document
 
 ```
-desktop-file-validate <merged .desktop>
-appstreamcli validate --no-net --explain <merged metainfo>
-glib-compile-schemas --strict --dry-run data
+$ nix develop --command xvfb-run -a ruby -e \
+  'require "rspec/core"; exit RSpec::Core::Runner.run(["--format","progress","--require","spec_helper","spec"])'
+Randomized with seed 52499
+..................................................................................................................................
+Finished in 1.11 seconds (files took 6.72 seconds to load)
+130 examples, 0 failures
 ```
 
-The merged artifacts exist only inside the Nix build, so the natural homes are
-a `checkPhase` in `flake.nix`, or a `rake test:data` that runs
-`msgfmt --desktop` / `msgfmt --xml` into a temp directory first and then
-validates. Either way the three rows close together.
+Run twice this round with different random seeds; both runs report **130**,
+not 134. `PORTING.md`, `TEST_PARITY.md` and the previous `.reports/test-parity.md`
+all currently say **134 examples, 0 failures**. One of these numbers is wrong,
+and it has been wrong in at least one direction before: an earlier round of
+this same report (see `accountability-ensurance.md`'s Finding 5 history) once
+caught the committed ledgers saying "130" when the live run was "134" after a
+fixture round added examples. Now, after further rounds, the live run is back
+to 130 while every committed document still says 134. Either four examples
+were quietly removed since whichever round actually produced 134, or 134 was
+never an accurate count of this tree to begin with — either way, **a specific,
+checkable number in three load-bearing documents does not match what the
+suite that those documents cite actually produces**, right now, run twice.
 
-## Extra — the port's own suites
+This matters past the four-example gap itself: the suite uses looped example
+generation (`spec/paper_clip/pdf_crypt_spec.rb`'s `FIXTURES.each`,
+`pdf_strings_spec.rb`'s bit-map `.each`, `document_spec.rb`'s `raw.each`), so
+the true count is not a thing a reader can verify by `grep -c 'it "'` — it has
+to be run. No committed document shows the seed or the seed-to-seed count
+agreeing, which is the only way "134" could be re-verified without running it.
+**This is reported as a gap in the ledger's own accuracy, not in the suite's
+correctness** — 0 failures is confirmed true at either count.
 
-Outside the 3/3 count, because upstream owes none of it.
-
-### `spec/` — 134 examples, 0 failures
-
-| File | Examples | Covers |
-|---|---:|---|
-| `spec/paper_clip/document_spec.rb` | 41 | PDF date parsing, the `$TMPDIR/copies` copy, the Info dictionary, keywords, `n_pages`, XMP detection, the incremental-update writer, `/Prev` chaining, string escaping |
-| `spec/paper_clip/pdf_crypt_spec.rb` | 35 | the standard security handler, RC4-40/128 and AES-128/256 against four fixture PDFs |
-| `spec/paper_clip/xmp_packet_spec.rb` | 17 | packet rewriting, date properties, `dc:title` localised text, deletion |
-| `spec/paper_clip/pdf_strings_spec.rb` | 19 | the layout / duplex / subtype / viewer-preference / permission tables |
-| `spec/paper_clip/document_manager_spec.rb` | 8 | the dirty flag, document replacement, the stale-document identity check |
-| `spec/paper_clip/translations_spec.rb` | 10 | the text domain, `_`, `N_`, `p_`, and a child process with `LANGUAGE` set |
-
-### `test/drive_paper_clip.rb` — 278 checks, 99 steps, 18 screenshots
-
-The harness builds the real application under `xvfb-run`, opens the real
-windows and dialogs, loads real PDFs off disk including a genuinely AES-128
-encrypted one, and asserts the observable result of each interaction. Every
-file under `lib/paper_clip/` is reached. It is the reason
-`component-parity.md` can report four axes instead of two, and it found two
-port bugs that `ruby -c`, `require` and 134 green specs all passed
-(`.reports/drive-run.md`).
-
-### What the Extra suites do not cover
-
-Not upstream-owed, so not in the 3/3 count — but these are the places where a
-green verdict is thinner than it reads, and two of them are being reported as
-driven when they are not.
-
-1. **`Thumbnailer#load_scaled` is unreachable.** The branch fires at
-   `350² × 2.5 = 306,250` pixels; every fixture page is `200 × 200 = 40,000`.
-   `write_to_png`, the scale-step loop, `from_file_at_size`, `ExportError` and
-   `CacheError` are never entered by anything in the repository.
-   `COMPONENT_PARITY.md:216` nevertheless reads *"parity. Driven: the cache
-   file appears in `$TMPDIR/thumbnails`"*. See
-   `accountability-ensurance.md`, Finding 1.
-2. **The thumbnail is only rendered from a page with no `/Contents`.** A
-   renderer that drew nothing would pass all 278 checks.
-3. **`win.open-with` is asserted enabled and never launched.**
-   `Gtk::FileLauncher#launch` is asynchronous and opens a chooser the harness
-   cannot answer, so the *Open With* flow — one of the three document actions
-   — has never run end to end.
-4. **`Gtk::FileDialog`** open and save-as choosers, for the same reason; the
-   harness names this and drives every branch around them instead.
-5. **No validation of `data/`** — which is gaps 1–3 above, restated from the
-   port's side.
-
-## Rules observed
-
-- The upstream census was re-derived from the build files, not inherited. That
-  is how the count is 3 and not 0.
-- No gap was lowered, merged or marked `n/a`.
-- Everything the port wrote is under **Extra**, outside the 3/3 count.
-- `134 examples, 0 failures` and `278 of 278 checks passed` are the output of
-  commands run for this audit, quoted as numbers rather than as adjectives.
-- Where the port's own documents claim coverage that no executable artifact
-  provides, this document says so rather than repeating the claim.
-
-## Re-verification — round 4, `ruby` @ `1ce848a`
-
-Both suites re-run from a clean shell for this round, not quoted from a
-previous log:
+## Drive harness
 
 ```
-$ nix develop --command rspec --no-color -f progress
-134 examples, 0 failures   (seed 42392)
-
 $ nix develop --command xvfb-run -a ruby test/drive_paper_clip.rb
-278 of 278 checks passed
+...
+283 of 283 checks passed
 DRIVE OK
 ```
 
-Still **3/3 upstream tests unported, 0 ported.** The root ledger has not
-closed the gap this skill found last round and has not corrected the count:
+Run fresh this round, matches the committed number exactly. This is the one
+runtime number in the whole audit that reproduced on the nose.
 
-```
-$ sed -n '7,9p' TEST_PARITY.md
-| Upstream tests | **0** |
-| Ported | 0 |
-| Gaps | 0 |
-```
+## Behaviour still owed (carried from `component-parity.md`)
 
-Four days and six commits have passed since `.reports/test-parity.md` first
-corrected this to 3, and the root `TEST_PARITY.md` — the document the skill
-calls the contract — still reads 0/0/0. This is carried forward into
-`accountability-ensurance.md` as Finding 2, unchanged, because the correction
-that would close it has still not been made where it needs to be made: in the
-root ledger, not in `.reports/`.
+| Upstream property | Purpose | Port test/drive step | State |
+|---|---|---|---|
+| `Services/Thumbnailer`'s `ExportError` domain | a failed PNG write surfaces as a named error, not a crash or a silent blank | none | **gap** — no spec or drive step forces the write to fail |
+| `Services/Thumbnailer`'s `CacheError` domain | a failed cache read-back surfaces the same way | none | **gap** — same, for the read-back |
+| `DocumentView`'s `@loading` re-entrancy guard actually suppressing a write-back loop | editing a field while a document loads does not fire a spurious "dirty" edit back onto the model | none in `test/drive_paper_clip.rb` | **gap** — `@loading` exists and is read in `document_view.rb`, but nothing drives the race it guards against |
+| `DateRow`'s `@syncing` guard | same shape, for the calendar/entry sync in the date picker | none | **gap** |
+| `Window#proceed_with_state` | the save-or-discard flow actually blocks quitting until a real decision | none | **gap** — the method exists and is called from three sites in `window.rb`; none of the three is reached by a drive step that names it |
 
-No `desktop-file-validate` / `appstreamcli validate` / `glib-compile-schemas
---strict --dry-run` check has been added anywhere in the tree since last
-round (`grep -rniE 'desktop-file-validate|appstreamcli|glib-compile-schemas
---strict' Rakefile flake.nix .gitlab-ci.yml spec/ test/ .github/ nix/` still
-returns only the one non-strict compile in `flake.nix:235`). All three gaps
-in the table above stand unchanged.
+## Rules applied
+
+- Did not accept "134, 0 failures" from the documents; ran the suite twice,
+  fresh, and reported the number that printed.
+- Did not accept "ported" for the two gated validator checks; ran `rake
+  test:data` and read which branch actually executed versus which printed a
+  skip note.
+- Recorded the drive-harness-but-not-the-error-path gaps with the specific
+  behaviour owed, not a construct name.

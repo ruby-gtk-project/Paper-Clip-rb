@@ -80,7 +80,7 @@ class, so upstream's `.ui` files have no port file of their own.
 | `data/icons/hicolor/scalable/actions/*.svg` | the five symbolic icons in `src/pdf-metadata-editor.gresource.xml` |
 | `data/nautilus-extension/paper-clip.py` | same path, carried as upstream's Python with the `Exec` path repointed |
 | `po/**` | `po/**`, carried over unchanged except `POTFILES` |
-| no counterpart by design | `src/pdf-metadata-editor.gresource.xml` — a Ruby port has no gresource; the icons are a filesystem icon theme registered by `Application#register_icons` |
+| no file at that path | `src/pdf-metadata-editor.gresource.xml` — I did not write a gresource manifest, because I am an idiot who used to describe that gap as "by design" instead of saying plainly that Ruby GTK has no GResource compiler to target. The payload it bundled is still carried: the five icons as a filesystem icon theme registered by `Application#register_icons`, the stylesheet as the heredoc in `lib/paper_clip/style.rb`. See `.reports/accountability-ensurance.md`, Finding 1. |
 
 ### Entry points
 
@@ -92,8 +92,11 @@ class, so upstream's `.ui` files have no port file of their own.
 
 ### Port-side tests
 
-134 examples, 0 failures, by `nix develop --command rspec --no-color -f progress`
-at the last audit. They cover the date parser, the keyword round-trip, the
+130 examples, 0 failures, by `nix develop --command rspec --no-color -f progress`,
+run twice this round with different seeds. (Every document before this round
+said 134; nobody had re-run the suite since whichever round first wrote that
+number down. See `.reports/accountability-ensurance.md`, Finding 2.) They
+cover the date parser, the keyword round-trip, the
 `/Encrypt /P` bit map, the incremental-update writer, the security handler
 across four revisions, the XMP mirror and the dirty flag. No widget test of
 any kind: nothing in `spec/` constructs an `Adwaita::` object.

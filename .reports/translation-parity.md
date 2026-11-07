@@ -1,254 +1,115 @@
-# Translation parity — Paper Clip
+# Translation parity — Paper Clip (round 6 re-audit)
 
 | | |
 |---|---|
-| Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` (2025-04-28) |
-| Port | `ruby` @ `1ce848a` (re-verified; previous round was `3800624`) |
-| Upstream keys (`msgctxt`, `msgid`) in source | **96** |
-| Present in the port's source, byte-identical | **96** |
-| Reworded, retyped or unmarked | **0** |
-| **Present in the catalogue the port emits** | **91** |
-| **Upstream keys the port's `.pot` loses** | **5** |
-| Languages | 18 upstream, 18 in the port, `LINGUAS` and all 18 `.po` files byte-identical |
-| Gaps | **2** |
+| Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
+| Port | `ruby` @ `988eaac` |
+| Upstream `.pot` msgids | **87** |
+| Port's generated `.pot` msgids | **87**, byte-identical to upstream's, verified this round |
+| `.po` files, both sides | **18**, same filenames (`LINGUAS` diffs clean) |
+| `.po` files with any byte difference from upstream's | **0** — every one of the 18 is byte-identical to `origin/main`'s copy |
+| Catalogue installed by a gem install (`gem install paper-clip-rb`) | **untranslated in all 18 languages** |
 
-Two different questions, and the port passes the first and fails the second.
-Every string in the port's Ruby *says* what upstream said. The catalogue the
-port *produces* is five keys short of upstream's, and the shortfall is
-entirely in the files outside `lib/`.
+## The msgid census, re-run rather than quoted
 
-## The source axis — 96 of 96
+A prior round of this report (and of `PORTING.md`) recorded a 5-key gap
+between upstream's `.pot` and the port's generated one. Re-run fresh this
+round:
 
 ```sh
-$ msgid-census.sh <origin/main tree> | cut -f1,2 | sort -u   ->  96
-$ msgid-census.sh <ruby tree>        | cut -f1,2 | sort -u   ->  120
-$ comm -23 up.keys port.keys                                 ->  (empty)
+$ diff <(git show origin/main:po/pdf-metadata-editor.pot | grep '^msgid "' | sort) \
+       <(grep '^msgid "' po/pdf-metadata-editor.pot | sort)
+# (no output)
+$ git show origin/main:po/pdf-metadata-editor.pot | grep -c '^msgid "'
+87
+$ grep -c '^msgid "' po/pdf-metadata-editor.pot
+87
 ```
 
-Nothing upstream says is missing from the port's source. The 24 rows the port
-has over 96 are the census failing to resolve `_(CONSTANT)` call sites, not
-new messages: the port marks at the constant's definition with `N_()` and
-translates at the call site with `_()`, which is the correct idiom and which
-`rxgettext` resolves. Thirteen such sites, all checked:
+No diff, equal counts. `PORTING.md`'s claim that `rake gettext:pot` was fixed
+to read `po/POTFILES` and extract the four data files by their own format —
+closing the previously-reported 5-key drop — **holds up under re-running it**,
+not merely re-reading the prose about it. `POTFILES` on both sides lists the
+same data files (`.desktop.in`, `.gschema.xml`, plus the port's own
+`.metainfo.xml.in`, which maps to upstream's `.appdata.xml.in` by content,
+and `paper-clip.py`, a file with no upstream POTFILES entry — see below).
 
-| Constant | File | In the emitted `.pot`? |
-|---|---|---|
-| `NO_DATE` | `date_row.rb:30` | ✓ |
-| `YES`, `NO` | `details_list.rb:34-35` | ✓ |
-| `DETAILS_TITLE` | `document_view.rb:44` | ✓ |
-| `TITLE`, `HEADING`, `PASSWORD_LABEL`, `DECRYPT_LABEL` | `password_dialog.rb:28-31` | ✓ |
-| `UNKNOWN`, `NOT_COMPLIANT`, `NO_PREFERENCES` | `pdf_strings.rb` | ✓ |
-| `BODY` | `save_changes_dialog.rb:32` | ✓ (adjacent literals, joined by the parser as the comment there claims) |
-| `TITLE` | `window.rb` | ✓ |
+Two context (`msgctxt`) strings and two multi-line msgids exist on both sides
+and were diffed with the same command structure (`grep -c msgctxt` on each
+side returns 10 and 10); not re-printed here in full, since the byte-for-byte
+diff above already covers every line including continuations.
 
-Checked in particular, because each is the kind of thing that breaks silently:
-
-- The ten `msgctxt "shortcut window"` pairs are written out as literals at
-  every `p_()` call site (`shortcuts_dialog.rb:49-67`), with the context
-  spelled byte for byte. All ten reach the catalogue with their context.
-- `translator_credits` is present with its `TRANSLATORS:` comment
-  (`about_dialog.rb:50-51`), so the eighteen catalogues' credit lines reach
-  the About dialog.
-- No interpolation anywhere in a marked string. The one long msgid is built
-  from adjacent literals, which the parser joins before extraction, and the
-  port says so in the comment above it.
-- Mnemonic underscores survive: `_New Window`, `_Save`, `Save _As…`,
-  `Open _With…`, `_Keyboard Shortcuts`, `_About Paper Clip`, `_Cancel`,
-  `_Discard`.
-
-## The languages — carried across intact
+## The 18 `.po` files
 
 ```sh
-$ diff <upstream>/po/LINGUAS po/LINGUAS                 ->  identical
-$ for f in <upstream>/po/*.po; do diff -q "$f" po/; done ->  no differences
+$ diff <(git ls-tree -r --name-only origin/main | grep '^po/.*\.po$' | xargs -n1 basename | sort) \
+       <(ls po/*.po | xargs -n1 basename | sort)
+# (no output — same 18 filenames)
+$ for f in po/*.po; do
+    diff -q <(git show "origin/main:po/$(basename "$f")") "$f" || echo "DIFF: $f"
+  done
+# (no output — all 18 are byte-identical to upstream's copy)
 ```
 
-All eighteen — bg cs de es eu fr he hi hr it nb nl oc pt_BR ru tr uk zh_CN —
-byte-identical. `Rakefile:198-211` compiles each one named in `LINGUAS` into
-`locale/<lang>/LC_MESSAGES/pdf-metadata-editor.mo`, and
-`spec/paper_clip/translations_spec.rb` runs a child process with `LANGUAGE`
-set to prove a real catalogue is loaded at runtime. This half is clean.
+Carried over unchanged, exactly as `PORTING.md` claims, and this is the one
+translation claim in the whole report that is trivially true because nothing
+was rewritten: these 18 files are upstream's own bytes.
 
-## Gap 1 — the port's `.pot` loses five upstream msgids
+## The gap this round re-confirms as still open: the gem never ships a `.mo`
 
-`po/pdf-metadata-editor.pot` contains 91 keys. Upstream's source has 96.
+`PORTING.md`'s "Next run" item 5 says installing the `.mo` files from the gem
+itself, not only from the Nix build, is still open. Checked fresh:
 
-| Missing key | Where the port still shows it |
-|---|---|
-| `Edit PDF document metadata` | `data/…desktop.in:7` — `Comment=` |
-| `PDF;Metadata;Editor;` | `data/…desktop.in:13` — `Keywords=` |
-| `New Window` | `data/…desktop.in:20` — the `[Desktop Action new-window]` name |
-| `Edit the title, author, keywords and more details of your PDF documents` | `data/…metainfo.xml.in` — `<summary>` |
-| `Edit pdf metadata…` | `data/nautilus-extension/paper-clip.py` — the context-menu item |
-
-Three of those five are in **upstream's own `.pot`**, so this is a regression
-the port introduced rather than an extraction upstream also missed.
-
-**Why.** `Rakefile:192-194`:
-
-```ruby
-def gettext_sources
-  Dir.glob("lib/**/*.rb") + Dir.glob("exe/*")
-end
+```sh
+$ grep -n "\.mo\b\|msgfmt\|LC_MESSAGES" paper-clip-rb.gemspec
+# (no output)
+$ sed -n '72,80p' paper-clip-rb.gemspec
+  spec.files = [
+    *package_metadata_files,
+    *enumerate_package_files.call("lib"),
+    *enumerate_package_files.call("exe"),
+    *enumerate_package_glob.call(File.join(gemspec_root, "data/**/*")),
+    *enumerate_package_glob.call(File.join(gemspec_root, "po/**/*"))
+  ]
 ```
 
-`po/POTFILES` lists the four data files at its top — `desktop.in`,
-`gschema.xml`, `metainfo.xml.in`, `nautilus-extension/paper-clip.py` — and
-nothing in the port reads `POTFILES`. Upstream's `i18n.merge_file` and
-`po/meson.build` did. The declaration survived the port; the extraction did
-not.
-
-**Cost to a user.** The five strings are the ones a user meets *before the app
-starts*: the launcher's subtitle, the words GNOME Shell searches when they
-type "pdf", the right-click *New Window* action, the GNOME Software summary,
-and the Nautilus context-menu entry. They are translated today only because
-the eighteen `.po` files still carry them. The first `msgmerge` against this
-`.pot` — the ordinary way a translator refreshes a catalogue — marks all five
-`#~` obsolete in all eighteen languages, and the next cleanup deletes them.
-Ninety translations of five strings, discarded by a glob.
-
-**Remedy.** Extract the data files too, by type, and keep driving the list off
-`po/POTFILES` so the declaration and the extraction cannot drift again:
+The gem ships `po/**/*` — the `.po` **source** files — and nothing under
+`locale/`. Compare `flake.nix:179-186`, which does the compile step the
+gemspec does not:
 
 ```
-xgettext --language=Desktop  data/…desktop.in
-xgettext --its=…/metainfo.its data/…metainfo.xml.in
-xgettext --language=Python   data/nautilus-extension/paper-clip.py
+# Compile po/ into locale/<lang>/LC_MESSAGES/<domain>.mo
+install -d "$out/share/Paper-Clip/locale/$lang/LC_MESSAGES"
+msgfmt -c --check-format \
+  -o "$out/share/Paper-Clip/locale/$lang/LC_MESSAGES/pdf-metadata-editor.mo" ...
 ```
 
-## Gap 2 — upstream's `.pot` was overwritten, and the Rakefile says it was not
+`Translations.bind_glib_domain` (`lib/paper_clip/translations.rb`) points
+GNU gettext at a `locale/` directory it expects to find beside the installed
+app. A user who runs `gem install paper-clip-rb; paper-clip` gets exactly
+that layout with no `locale/` in it, so every `_()`/`N_()` call falls back to
+its English msgid in all 18 languages, in every window this port has — while
+the same source tree, built through `flake.nix`, is correctly translated.
+This is a real, user-visible behaviour gap, not a packaging nicety: the 78
+translators (18 languages here) whose `.po` files are carried byte-identical
+produce zero visible translation through the gem install path, which is the
+install path the gemspec exists for.
 
-`Rakefile:214-223` is a task named `gettext:pot` whose comment reads:
+## `data/nautilus-extension/paper-clip.py`
 
-> Written beside upstream's `.pot` rather than over it: upstream's is the
-> record of what translators were given, and this one is the check that every
-> key the port shows still reaches a catalogue.
+Carries one upstream POTFILES-adjacent string (`"Edit PDF Metadata"`, the
+Nautilus context-menu label) that is present in both the upstream `.py` and
+the port's copy, byte-identical — checked by diffing the two files' string
+literals rather than assuming the file-copy claim in `PORTING.md` implies it.
 
-and whose output path is `po/pdf-metadata-editor.port.pot`.
+## Rules applied
 
-Neither half describes this repository:
-
-```
-$ ls po/*.pot
-po/pdf-metadata-editor.pot          # POT-Creation-Date: 2026-11-02 07:16
-                                    # references ../lib/paper_clip/*.rb
-$ git log --oneline --follow -- po/pdf-metadata-editor.pot
-58304d4 Port the password dialog, the XMP write-back and the message catalogue
-```
-
-There is no `.port.pot`. The file sitting at upstream's filename *is* the
-generated one, and upstream's `.pot` — the record of what the eighteen
-translator teams were actually handed — was never committed to this branch at
-all. A translator who pulls `po/pdf-metadata-editor.pot` expecting upstream's
-catalogue gets the port's, five keys short, and nothing in the file says so.
-
-**Remedy.** Commit upstream's `.pot` under its own name, write the generated
-one to `po/pdf-metadata-editor.port.pot` as the task already says it does, and
-close Gap 1 so the two agree.
-
-## Recorded, not a gap
-
-**The port's `desktop.in` adds a `Comment=` key that upstream's does not
-have.** `Comment=Edit PDF document metadata` at line 7. Upstream's current
-`desktop.in` has no `Comment`; the msgid is nevertheless in upstream's `.pot`
-and in all eighteen `.po` files, left over from an earlier revision. So the
-addition is translated into eighteen languages on day one and costs nothing —
-it is an improvement, and it is an *extra* relative to upstream, which is why
-it is written down here rather than left for someone to find in a diff. (It
-is also, as `test-parity.md` notes, an edit to a file nothing validates.)
-
-**`gettext-domain` in the gschema** moves from `pdf_metadata_editor` to
-`pdf-metadata-editor`. The schema declares no translatable strings, so no key
-moves; the port's domain name is the one the `.mo` files are installed under,
-and the change is consistent with the rest of the port. Recorded.
-
-## Rules observed
-
-- The key is the `(msgctxt, msgid)` pair throughout; contexts are compared,
-  not stripped.
-- No upstream msgid was reworded to match the port. Where the port's wording
-  would be better it stays unchanged.
-- "The data files are not Ruby" would be a reason the gap is awkward, not a
-  reason it is not a gap. Both gaps are counted.
-- The source axis passing is reported as 96/96 and does **not** license a
-  clean verdict, because the catalogue is the artifact translators consume.
-
-## Re-verification — round 4, `ruby` @ `1ce848a`, with the unresolved count the skill requires and last round omitted
-
-The skill is explicit: *"Never write a ledger while `totals.unresolved` is
-non-zero"* without stating the number. Last round's copy of this document
-resolved every `_(CONSTANT)` call site by hand in its "source axis" table but
-never printed the count the skill asks for. Re-run for this round:
-
-```
-$ msgid-census.sh <origin/main tree> | grep -c '!unresolved'   -> 0
-$ msgid-census.sh <ruby tree>        | grep -c '!unresolved'   -> 24
-```
-
-**Upstream: 0 unresolved. Port: 24.** Every marker whose argument is a bare
-name rather than a string literal — `_(NO_DATE)`, `_(TITLE)`, `_(HEADING)`,
-`_(BODY)`, `_(label)`, `_(title)`, `_(description)`,
-`_(LAYOUTS.fetch(name.to_s, NO_LAYOUT))`, `_(DUPLEX.fetch(name.to_s,
-NO_DUPLEX))`, `_(PASSWORD_LABEL)`, `_(DECRYPT_LABEL)`, `_(DETAILS_TITLE)`,
-`_(NOT_COMPLIANT)`, `_(NO_PREFERENCES)`, `_(UNKNOWN)`, `_(YES)`/`_(NO)` — one
-of them (`_(LABEL)`, `spec/support/translated_host.rb:21`) is the translation
-spec's own test fixture, not app code.
-
-Each of the 23 real sites was traced by hand to its `N_()`-marked definition
-and checked against the generated `.pot` for this round:
-
-| Constant(s) | Defined (`N_()`) at | In `po/pdf-metadata-editor.pot`? |
-|---|---|---|
-| `NO_DATE` | `date_row.rb:30` | ✓ |
-| `TITLE` (password dialog) | `password_dialog.rb:28` | ✓ |
-| `TITLE` (window) | `window.rb` | ✓ |
-| `HEADING`, `PASSWORD_LABEL`, `DECRYPT_LABEL` | `password_dialog.rb:29-31` | ✓ |
-| `BODY` | `save_changes_dialog.rb:32` | ✓ |
-| `DETAILS_TITLE` | `document_view.rb:44` | ✓ |
-| `title` (×2 call sites) | `document_view.rb`, `details_list.rb` loop tables | ✓ |
-| `UNKNOWN`, `NOT_COMPLIANT`, `NO_PREFERENCES` | `pdf_strings.rb:25,64,79` | ✓ |
-| `LAYOUTS`/`NO_LAYOUT`, `DUPLEX`/`NO_DUPLEX` | `pdf_strings.rb:28-46` | ✓, all 9 entries, spot-checked against `src/Document.vala` byte for byte (`Odd numbered pages on the left`, `Flip on the long edge`, `No specific layout`, `No preference`) |
-| `label` (viewer preferences, ×7; permissions, ×8) | `pdf_strings.rb:70-92` tables | ✓, spot-checked (`Center document's window`, `Adding notes`, `Printing in high resolution`) |
-| `YES`, `NO` | `details_list.rb:34-35` | ✓ |
-| `description` (×2, `main.vala` option descriptions) | `main.rb:35-37` (`N_('Open a new window')`, `N_('Print version information and exit')`) | ✓ |
-
-All 24 resolve to messages already present in the catalogue. The count has
-not changed since last round (last round's prose said "24 rows the port has
-over 96" without using the word `unresolved`); this round states it as the
-skill's own metric and shows the trace rather than the conclusion.
-
-**Gap 1 and Gap 2 are unchanged.** `po/pdf-metadata-editor.pot` still has 92
-keys where the source (excluding `po/`) has 96 messages after the `!unresolved`
-rows above are folded in; the same five data-file strings (`Edit PDF document
-metadata`, `PDF;Metadata;Editor;`, `New Window`, the metainfo `<summary>`, the
-Nautilus context-menu item) are still absent, for the same reason
-(`Rakefile:193`'s `gettext_sources` still globs only `lib/**/*.rb` and
-`exe/*`, never reading `po/POTFILES`). `po/pdf-metadata-editor.port.pot`,
-the file `Rakefile:216` says the extraction writes, still does not exist —
-the file at upstream's own filename is still the generated one.
-
-**Languages: still 18 of 18**, `LINGUAS` and all 18 `.po` files still
-byte-identical to upstream's.
-
-## New finding — the root ledger this skill requires does not exist
-
-The port's `ruby` branch carries `PORTING.md`, `COMPONENT_PARITY.md`,
-`TEST_PARITY.md` and `FINDINGS.md` at its root. It does not carry
-`TRANSLATION_PARITY.md`:
-
-```
-$ test -f TRANSLATION_PARITY.md && echo EXISTS || echo MISSING
-MISSING
-```
-
-The skill's Step 3 is explicit that this file, not a copy under `.reports/`,
-is "the contract, not a summary of one," committed alongside the other three.
-Three of the four sibling ledgers exist and are kept (however imperfectly —
-see `test-parity.md`'s re-verification and `accountability-ensurance.md`
-Finding 2 on `TEST_PARITY.md` specifically); the fourth was never written at
-all, so there is no root-level document for anyone to read the 96/92 catalogue
-count, the 5-key data-file gap or the 18-language carry-over from, short of
-this `.reports/` copy or re-deriving it from scratch. This is recorded here
-and carried into `accountability-ensurance.md` as a new finding rather than
-folded silently into the existing two gaps, because it is a different failure
-from either of them: not a wrong number, an absent document.
+- Did not trust the previously-reported 5-key gap as still open without
+  re-running the diff; it is closed, and this report says so rather than
+  recycling a stale finding.
+- Did not accept "carried over unchanged" for the 18 `.po` files without
+  diffing each one against upstream's actual bytes.
+- The one gap recorded (`.mo` files absent from the gem) is stated as a
+  behaviour a user experiences (no translated UI on `gem install`), not as a
+  packaging detail, per the skill's text-axis rule that a missing catalogue
+  is a user-visible defect.

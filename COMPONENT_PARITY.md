@@ -453,6 +453,7 @@ Verified end to end, not assumed: `LANGUAGE=de` returns
 | Units compared | 23 |
 | Upstream units with no port file | 0 |
 | Distinct behaviour gaps named above | 0 (was 1 — saving to a path rather than a URI, closed this round) |
+| Driven but unverified branches | 2 — `Thumbnailer`'s `ExportError`/`CacheError` domains, plus `window.rb`'s `proceed_with_state` and `date_row.rb`'s `@syncing` guard are never named by the drive harness; see `.reports/component-parity.md` (round 6) |
 | Message keys | 96 / 96 in source; `rake gettext:pot` now extracts all 96 (was 91 before this round — see `TRANSLATION_PARITY.md`) |
 | Signals driven | the whole app, not only the editor page: `test/drive_paper_clip.rb` reaches all 15 widget units, 283 of 283 checks passed, including the PNG-cache branch of `Thumbnailer` as of round 5 |
 | Screenshots taken | **19**, under `tmp/shots/` |
