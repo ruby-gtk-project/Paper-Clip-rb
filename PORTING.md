@@ -134,28 +134,29 @@ From `.reports/component-parity.md` (5):
 3. ~~No D-Bus service file.~~ Closed in round 3:
    `data/io.github.diegoivan.pdf_metadata_editor.service.in`, installed to
    `share/dbus-1/services` with `@bindir@` substituted.
-4. Half-closed in round 3: the About dialog's debug block now prints a
-   Poppler version (and had been printing the literal strings
-   "Gtk::Version" and "GdkPixbuf::Version" in place of two others, which is
-   fixed). Exempi is still not linked and the block says so.
-5. Most of the port has still not been observed running. Round 3 drove the
-   application, the main window and the editor page under `xvfb-run`, which
-   answered the two questions that were blocking everything else:
-   `Adwaita::ApplicationWindow` does open, and three binding-name mistakes
-   (`Gtk::IconTheme.for_display`, `file.query_exists?`,
-   `Gtk::ShortcutTrigger.parse_string` in four files) were stopping the app
-   before it drew a window — all three in code the parity table had scored as
-   present. `FINDINGS.md` §8. The dialogs, the drop overlay, the keyword list
-   and the date row remain readings of source, and nothing has been
-   screenshotted.
+4. ~~The About dialog's debug block printed the literal string
+   "Exempi: not linked" rather than naming the port's own XMP code.~~
+   Closed this round: the Poppler version prints, and the line where Exempi
+   used to be now prints `XmpPacket`'s own gem version
+   (`Paper::Clip::Rb::Version::VERSION`), so a bug report says which XMP
+   code actually ran.
+5. ~~Most of the port has still not been observed running.~~ Closed as of
+   the drive harness reaching the whole app: `test/drive_paper_clip.rb` now
+   runs 278 checks across 99 steps and 18 screenshots, reaching every file
+   under `lib/paper_clip/` — all 15 widget units, not only the editor page.
+   `COMPONENT_PARITY.md` and `TEST_PARITY.md` carry the current numbers.
 
 From `.reports/component-identification.md` (3): ~~`DocumentThumbnail` and
 `Thumbnailer` have no port unit; `*.service.in` has no port unit.~~ All three
 closed in round 3. (They overlapped gaps 1–3 above as identification-level
 findings and were counted separately by that report.)
 
-From `.reports/test-parity.md` (3): all three upstream meson validation tests
-are unported.
+From `.reports/test-parity.md` (3): ~~all three upstream meson validation
+tests are unported.~~ Closed this round: `rake test:data` runs
+`desktop-file-validate`, `appstreamcli validate --no-net --explain` and
+`glib-compile-schemas --strict --dry-run` against the merged data files,
+each gated on the tool's presence the way upstream gates them on
+`find_program(..., required: false)`. See `TEST_PARITY.md`.
 
 From `.reports/translation-parity.md` (2): `po/pdf-metadata-editor.pot` was
 overwritten and the replacement drops 5 of the 96 keys; a gem-installed Paper
@@ -222,13 +223,23 @@ and installed only by the flake.
 
 In order:
 
-1. Check a driver into the repository. Round 3 drove the app from scratch
-   files and found three `NoMethodError`s in code the parity table had scored
-   as present; a `test/drive_*.rb` the devShell banner already advertises
-   would have caught them a round earlier. `Adwaita::ApplicationWindow` was
-   also answered on the way: it works.
-2. Drive every other unit. Only the editor page has been driven end to end.
-3. The three widget-level guards `TEST_PARITY.md` lists as owed.
-4. Screenshots, which nothing has produced yet.
-5. Restore the 5 dropped `.pot` keys; install the `.mo` files from the gem as
-   well as from the flake.
+1. ~~Check a driver into the repository.~~ Done: `test/drive_paper_clip.rb`
+   is checked in and reaches the whole app, 278/278 checks, 18 screenshots.
+2. ~~Drive every other unit.~~ Done: all 15 widget units under
+   `lib/paper_clip/` are reached by the drive harness, not only the editor
+   page.
+3. The three widget-level guards `TEST_PARITY.md` lists as owed
+   (`@loading` in `document_view.rb`, `@syncing` in `date_row.rb`,
+   `proceed_with_state` in `window.rb`) — still open; the harness now has
+   the machinery to drive them, it just has not been pointed at them yet.
+4. ~~Screenshots, which nothing has produced yet.~~ Done: 18, taken by the
+   drive harness.
+5. ~~Restore the 5 dropped `.pot` keys; install the `.mo` files from the gem
+   as well as from the flake.~~ The `.pot` keys are restored this round
+   (`rake gettext:pot` now reads `po/POTFILES` and extracts the four data
+   files by their own format; see `TRANSLATION_PARITY.md`). Installing the
+   `.mo` files from the gem itself, rather than only from the Nix build, is
+   still open.
+6. Install `desktop-file-utils` and `appstream` into the devShell so
+   `rake test:data`'s first two checks run for real here instead of
+   skipping on a missing tool.

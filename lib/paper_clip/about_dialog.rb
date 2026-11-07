@@ -4,6 +4,7 @@ require 'adwaita'
 
 require_relative 'poppler'
 require_relative 'translations'
+require_relative '../paper/clip/rb/version'
 
 module PaperClip
   # AboutDialog is the about window, debug information included.
@@ -17,12 +18,15 @@ module PaperClip
   # catalogues' credits lines reach the dialog (src/application.vala:191).
   #
   # The debug block lists every library a bug report needs. I did not keep
-  # upstream's Poppler and Exempi lines, because this port links neither: it
-  # parses the PDF itself (see Document) and edits the XMP packet as XML (see
-  # XmpPacket), so there is no version of either to print. That is a real
-  # difference in what a bug report can say, and it is written down in
-  # FINDINGS.md as the cost of the two bindings being unavailable rather than
-  # left implicit here. GdkPixbuf is printed, because the port does link it.
+  # upstream's Poppler line, because this port links neither it nor Exempi: it
+  # parses the PDF itself (see Document). That is a real difference in what a
+  # bug report can say, and it is written down in FINDINGS.md as the cost of
+  # the Poppler binding being unavailable rather than left implicit here.
+  # GdkPixbuf is printed, because the port does link it. In Exempi's place,
+  # since this port has no Exempi binding and edits the XMP packet as XML (see
+  # XmpPacket) instead, the debug block names this gem's own version rather
+  # than a library that never ran — a maintainer reading a bug report can then
+  # tell which XMP code produced it.
   module AboutDialog
     include Translations
 
@@ -65,7 +69,7 @@ module PaperClip
         GdkPixbuf #{pixbuf_version} (Runtime)
         Ruby #{RUBY_VERSION} #{RUBY_PLATFORM}
         Poppler #{poppler_version} (Runtime) — rendering only; metadata is parsed by this port
-        Exempi: not linked — this port edits the XMP packet as XML
+        XmpPacket #{Paper::Clip::Rb::Version::VERSION} (this gem) — no Exempi binding; XMP is read and rewritten as XML
 
         Running under Flatpak? #{flatpak?}
         OS Information? #{os_name}

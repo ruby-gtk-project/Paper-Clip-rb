@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal ITS 2.0 rules for extracting translatable strings from
+  io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in with GNU xgettext's
+  its option. Only name, summary and the top description's p are marked
+  translatable; the release notes description (translatable="no")
+  and its ul/li children stay untranslated, matching upstream's own
+  AppStream metadata rules.
+-->
+<its:rules xmlns:its="http://www.w3.org/2005/11/its" version="2.0">
+  <its:translateRule selector="//*" translate="no"/>
+  <its:translateRule selector="//name|//summary" translate="yes"/>
+  <its:translateRule selector="//description[not(@translatable='no')]/p" translate="yes"/>
+  <its:translateRule selector="//*[@translatable='no']" translate="no"/>
+</its:rules>

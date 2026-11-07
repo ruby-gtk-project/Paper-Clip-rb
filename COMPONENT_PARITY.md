@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | Upstream | `origin/main` @ `c4db98e0bc2b8921d78c9e3fbf3d85ad2a124bd0` |
-| Port | `ruby` branch, round 3 |
+| Port | `ruby` branch, round 4 |
 | Units compared | 23 |
 | Units with no port file at all | **0** (was 2) |
-| Driven (signals actually fired) | the editor page: file opened, thumbnail rendered, both shortcuts resolved and `win.save` activated |
-| Screenshots | **none** |
+| Driven (signals actually fired) | the whole app — `test/drive_paper_clip.rb`: **278 of 278 checks passed, `DRIVE OK`**, all 15 widget units reached, not only the editor page |
+| Screenshots | **18**, under `tmp/shots/` |
 
 The file map is in `PORTING.md`. Costs and open questions are in
 `FINDINGS.md`. Message keys are in the translation section at the foot of this
@@ -218,7 +218,7 @@ Driven: a 400×600 page rendered to a `GtkRenderNodePaintable` of 350×525.
 | memory format from byte order | `B8G8R8A8_PREMULTIPLIED` / `A8R8G8B8_PREMULTIPLIED`, cached | same, cached | parity |
 | surface allocated before the render | 1 | 1 | parity: `Cairo.ImageSurface` ARGB32 at the page's truncated size |
 | render off the main loop | ThreadPool with one worker | `ThreadManager`'s one worker, with the GVL released across `Poppler::Page#render` | correspondence: one job covers render and load where upstream awaits each separately. `FINDINGS.md` §1 on the GVL |
-| big page → downscaled PNG | `write_to_png`, then `from_file_at_size` | same | parity. Driven: the cache file appears in `$TMPDIR/thumbnails` |
+| big page → downscaled PNG | `write_to_png`, then `from_file_at_size` | same | parity by reading only. This branch fires above `350² × 2.5 = 306,250` px; every committed fixture PDF is `200 × 200 = 40,000` px, so `write_to_png`, the scale-step loop, `from_file_at_size`, `ExportError` and `CacheError` are never entered by anything in the repository. No fixture over ~554×554 exists yet to drive it — see `TEST_PARITY.md` |
 | small page → memory texture | `Gdk.MemoryTexture` over a copy of the surface bytes | same; `surface.data` *is* the copy | parity. Driven |
 | step loop for the scale factor | 0.1 up by 0.1 while below 0.8 | same seven steps, else 0.8 | parity, including upstream multiplying the pixel count by the factor rather than its square |
 | cache path | `$TMPDIR/thumbnails/<basename>.png` | same | parity |
@@ -453,10 +453,12 @@ Verified end to end, not assumed: `LANGUAGE=de` returns
 | Units compared | 23 |
 | Upstream units with no port file | 0 |
 | Distinct behaviour gaps named above | 0 (was 1 — saving to a path rather than a URI, closed this round) |
-| Message keys | 96 / 96, 0 gaps |
-| Signals driven | the editor page, end to end; every other unit still unread by a driver |
-| Screenshots taken | **0** |
+| Message keys | 96 / 96 in source; `rake gettext:pot` now extracts all 96 (was 91 before this round — see `TRANSLATION_PARITY.md`) |
+| Signals driven | the whole app, not only the editor page: `test/drive_paper_clip.rb` reaches all 15 widget units, 278 of 278 checks passed |
+| Screenshots taken | **18**, under `tmp/shots/` |
 
-Driving the app for the first time cost three `NoMethodError`s that this table
-had scored as parity. The remaining units have not been driven, and that is
-what decides how much the rest is worth.
+Driving the app for the first time, in an earlier round, cost three
+`NoMethodError`s that this table had scored as parity — see `FINDINGS.md` §8.
+Every unit has since been driven at least once; `TEST_PARITY.md`'s "Owed"
+section names the three widget-level guards still not exercised by name
+rather than by construction.

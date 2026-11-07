@@ -190,8 +190,63 @@ begin
     File.read("po/LINGUAS").split
   end
 
+  # po/POTFILES is upstream's own manifest of files that carry translatable
+  # strings. Driving the source list off it, instead of a glob, is what
+  # keeps the declared list and the extracted one from drifting apart: a
+  # glob over lib/**/*.rb + exe/* silently drops the four data files
+  # POTFILES still lists (the desktop entry, the gschema, the metainfo and
+  # the Nautilus extension), which is how the port's .pot lost five of
+  # upstream's 96 msgids. See TRANSLATION_PARITY.md.
+  def gettext_potfiles
+    File.readlines("po/POTFILES", chomp: true).reject(&:empty?)
+  end
+
   def gettext_sources
-    Dir.glob("lib/**/*.rb") + Dir.glob("exe/*")
+    gettext_potfiles.select { |path| path.start_with?("lib/", "exe/") }
+  end
+
+  def gettext_data_files
+    gettext_potfiles.select { |path| path.start_with?("data/") }
+  end
+
+  # Each non-Ruby format POTFILES lists needs its own xgettext front end:
+  # rxgettext (the Ruby gem, used for gettext_sources above) only parses
+  # Ruby. The .desktop entry and the Nautilus extension have built-in
+  # xgettext languages; the metainfo XML and the gschema XML need an ITS
+  # 2.0 rule file, because xgettext has no built-in notion of either
+  # format's own translatable elements.
+  def gettext_xgettext_args_for(path)
+    case path
+    when /\.desktop\.in\z/
+      ["--language=Desktop"]
+    when /\.metainfo\.xml\.in\z/
+      ["--its=po/its/metainfo.its"]
+    when /\.gschema\.xml\z/
+      ["--its=po/its/gschema.its"]
+    when /\.py\z/
+      ["--language=Python"]
+    else
+      raise "gettext:pot has no extractor for #{path}; add one to " \
+        "gettext_xgettext_args_for rather than silently skipping it"
+    end
+  end
+
+  # Extracts one data file with the system xgettext (GNU gettext-tools),
+  # since rxgettext cannot read any of these formats, and returns the
+  # temporary .pot it wrote.
+  def gettext_extract_data_file(path, tmp_dir)
+    out = File.join(tmp_dir, "#{path.tr("/", "_")}.pot")
+    sh(
+      "xgettext",
+      "--from-code=UTF-8",
+      "--force-po",
+      "--package-name=#{GETTEXT_DOMAIN}",
+      *gettext_xgettext_args_for(path),
+      "-o",
+      out,
+      path,
+    )
+    out
   end
 
   namespace :gettext do
@@ -215,14 +270,32 @@ begin
     task :pot do
       # Written beside upstream's .pot rather than over it: upstream's is the
       # record of what translators were given, and this one is the check that
-      # every key the port shows still reaches a catalogue.
-      GetText::Tools::XGetText.run(
-        *gettext_sources,
-        "-o",
-        "po/#{GETTEXT_DOMAIN}.port.pot",
-        "--package-name=#{GETTEXT_DOMAIN}",
-        "--add-comments=TRANSLATORS",
-      )
+      # every key the port shows still reaches a catalogue. Two extractors
+      # feed it — rxgettext for the Ruby sources, the system xgettext (once
+      # per format) for the four data files POTFILES also lists — and
+      # msgcat merges their output into one catalogue the way upstream's own
+      # po/meson.build merges per-file .pot fragments.
+      require "tmpdir"
+      Dir.mktmpdir("paper-clip-pot") do |tmp_dir|
+        ruby_pot = File.join(tmp_dir, "ruby.pot")
+        GetText::Tools::XGetText.run(
+          *gettext_sources,
+          "-o",
+          ruby_pot,
+          "--package-name=#{GETTEXT_DOMAIN}",
+          "--add-comments=TRANSLATORS",
+        )
+        data_pots = gettext_data_files.map { |path| gettext_extract_data_file(path, tmp_dir) }
+        sh(
+          "msgcat",
+          "--use-first",
+          "--sort-by-file",
+          ruby_pot,
+          *data_pots,
+          "-o",
+          "po/#{GETTEXT_DOMAIN}.port.pot",
+        )
+      end
     end
   end
 
@@ -232,5 +305,59 @@ rescue LoadError
   desc("(stub) gettext:mo:update is unavailable")
   task("gettext:mo:update") do
     warn("NOTE: the gettext gem isn't installed in the current environment")
+  end
+end
+
+### DATA VALIDATION TASKS
+# Ports upstream's three declared `meson test` targets (data/meson.build),
+# which the flake builds and installs but never checks:
+#
+#   test('Validate desktop file',  desktop-file-validate)
+#   test('Validate appstream file', appstreamcli validate --no-net --explain)
+#   test('Validate schema file',    glib-compile-schemas --strict --dry-run)
+#
+# Each is gated on the tool being on PATH, exactly as upstream gates them on
+# `find_program(..., required: false)` — a missing validator skips its check
+# with a note rather than failing the task, but a validator that IS present
+# and rejects the file does fail it. See TEST_PARITY.md.
+namespace :test do
+  desc "Validate data/ against upstream's three meson.build tests"
+  task :data do
+    require "tmpdir"
+    Dir.mktmpdir("paper-clip-data-check") do |tmp_dir|
+      desktop_in = "data/io.github.diegoivan.pdf_metadata_editor.desktop.in"
+      metainfo_in = "data/io.github.diegoivan.pdf_metadata_editor.metainfo.xml.in"
+      schema_dir = "data"
+
+      if find_executable0("desktop-file-validate")
+        merged_desktop = File.join(tmp_dir, "io.github.diegoivan.pdf_metadata_editor.desktop")
+        sh("msgfmt", "--desktop", "--template", desktop_in, "-d", "po", "-o", merged_desktop)
+        sh("desktop-file-validate", merged_desktop)
+      else
+        warn("NOTE: desktop-file-validate not found on PATH; skipping 'Validate desktop file'")
+      end
+
+      if find_executable0("appstreamcli")
+        merged_metainfo = File.join(tmp_dir, "io.github.diegoivan.pdf_metadata_editor.metainfo.xml")
+        sh("msgfmt", "--xml", "--template", metainfo_in, "-d", "po", "-o", merged_metainfo)
+        sh("appstreamcli", "validate", "--no-net", "--explain", merged_metainfo)
+      else
+        warn("NOTE: appstreamcli not found on PATH; skipping 'Validate appstream file'")
+      end
+
+      if find_executable0("glib-compile-schemas")
+        sh("glib-compile-schemas", "--strict", "--dry-run", schema_dir)
+      else
+        warn("NOTE: glib-compile-schemas not found on PATH; skipping 'Validate schema file'")
+      end
+    end
+  end
+end
+
+# The same PATH lookup `which` performs, standing in for meson's
+# `find_program(..., required: false).found()`.
+def find_executable0(name)
+  ENV["PATH"].to_s.split(File::PATH_SEPARATOR).any? do |dir|
+    File.executable?(File.join(dir, name))
   end
 end

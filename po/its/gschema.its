@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal ITS 2.0 rules for extracting translatable strings from
+  io.github.diegoivan.pdf_metadata_editor.gschema.xml with GNU xgettext's
+  its option. GSettings schemas mark a key's human-readable text with
+  summary and description elements; everything else (ids, paths, types)
+  is structural and stays untranslated. The current schema declares no
+  keys at all, so this correctly extracts zero strings rather than
+  silently matching the wrong elements if a key is ever added.
+-->
+<its:rules xmlns:its="http://www.w3.org/2005/11/its" version="2.0">
+  <its:translateRule selector="//*" translate="no"/>
+  <its:translateRule selector="//summary|//description" translate="yes"/>
+</its:rules>
