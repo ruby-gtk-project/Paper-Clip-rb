@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "rb/version"
 require_relative "../../paper_clip/models"
+require_relative "rb/version"
 
 # Paper::Clip::Rb is the gem's library entry point, which is what
 # spec/spec_helper.rb requires and what `rake spec` therefore needs to exist.

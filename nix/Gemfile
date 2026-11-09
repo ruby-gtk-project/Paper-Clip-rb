@@ -10,10 +10,3 @@ source "https://rubygems.org"
 
 gem "adwaita"
 gem "gtk4"
-gem "gettext"
-
-# The port's own spec suite, used by the devShell only: `groups` in flake.nix
-# keeps this out of the packaged app's runtime closure.
-group :test do
-  gem "rspec"
-end
